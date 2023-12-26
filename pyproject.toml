@@ -7,6 +7,8 @@ authors = [
 ]
 dependencies = [
     "toml>=0.10.2",
+    "requests>=2.31.0",
+    "pydantic>=2.5.3",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -37,7 +39,7 @@ explicit_package_bases = true
 # See https://github.com/astral-sh/ruff#configuration
 [tool.ruff.lint]
 select = ["F", "E", "I001"]
-ignore = ["D413"]
+ignore = ["D413", "F401"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"

@@ -1,3 +1,10 @@
+from typing import Any
+from urllib.parse import urlencode
+
+import requests
+from pydantic import BaseModel
+
+
 class Filters:
     """Simple method to apply filters to a query.
 
@@ -132,9 +139,9 @@ class Filters:
         return [value]
 
     def _make_filter_str(self) -> str:
-        r"""Make the filter string for the query.
+        r"""Make the filter dict for the query.
 
-        Something like `filter=\appid\440,\gametype\payload,valve`
+        Something like `\appid\440,\gametype\payload,valve`
 
         Returns:
             formatted filter string for the request
@@ -148,16 +155,141 @@ class Filters:
             if isinstance(attr, list):
                 attr = ",".join(attr)
 
-            filters.append(f"\\{filter_param}\\{attr}")
+            filters.append(f"\{filter_param}\{attr}")
 
         # handle defaults
         if not filters:
             return ""
 
-        return f"filter={','.join(filters)}"
+        return "".join(filters)
+
+    @property
+    def filter_string(self) -> dict[str, str]:
+        return self._make_filter_str()
 
     def add_nor_filter(self) -> None:
-        pass
+        raise NotImplementedError
 
     def add_nand_filter(self) -> None:
-        pass
+        raise NotImplementedError
+
+
+class Server(BaseModel):
+    """Represent a server response from https://api.steampowered.com/IGameServersService/GetServerList/v1."""
+
+    addr: str
+    gameport: int
+    steamid: str
+    name: str
+    appid: int
+    gamedir: str
+    version: str
+    product: str
+    region: int
+    players: int
+    max_players: int
+    bots: int
+    map: str
+    secure: bool
+    dedicated: bool
+    os: str
+    gametype: str
+
+    URL: str = "https://api.steampowered.com/IGameServersService/QueryByFakeIP/v1/"
+
+    # four query types -- https://developer.valvesoftware.com/wiki/Source_RCON_Protocol
+    # 0 is nothing
+    # 1 is SDR backed attrs lik above
+    # 2 is player data
+    # 3 is game rules
+    QUERY_TYPES: dict[int, str] = {
+        1: "ping_data",
+        2: "players_data",
+        3: "rules_data",
+    }
+
+    @property
+    def tags(self) -> list[str]:
+        """Property to just make the `gametype` attribute nicer."""
+        return self.gametype.split(",")
+
+    @property
+    def ip(self) -> str:
+        """Property to return IP without port."""
+        return self.addr.split(":")[0]
+
+    @property
+    def fake_ip(self) -> int:
+        """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
+        ip_parts = [int(part) for part in self.ip.split(".")]
+        return (ip_parts[0] * 256**3) + (ip_parts[1] * 256**2) + (ip_parts[2] * 256) + ip_parts[3]
+
+    def query(self, steam_api_key: str) -> dict[str, Any]:
+        """Query for the server information using `QueryByFakeIP` endpoint.
+
+        Note that we use `QueryByFakeIP` because of the steam datagram relay (SDR) protocol.
+
+        Args:
+            steam_api_key: steam api key
+        """
+        server_data = {}
+
+        params = {
+            "key": steam_api_key,
+            "fake_ip": self.fake_ip,
+            "fake_port": self.gameport,
+            "app_id": self.appid,
+        }
+        for query_type, query_key in self.QUERY_TYPES.items():
+            params["query_type"] = query_type
+
+            response = requests.get(self.URL, params)
+            server_data[query_key] = response.json()["response"][query_key]
+
+        return server_data
+
+
+class Query:
+    """Object that represents a response from the api.steampowered.com/IGameServersService/GetServerList/v1 endpoint."""
+
+    URL = "https://api.steampowered.com/IGameServersService/GetServerList/v1/"
+
+    def __init__(self, steam_api_key: str, filters: dict[str, Any], limit: int | None = None) -> None:
+        """Prepare a query for the `GetServerList` endpoint.
+
+        Args:
+            steam_api_key: steam api key
+            filters: filters, must adhere to the `Filters` class
+            limit: limit servers to return. Defaults to None.
+        """
+        self.steam_api_key = steam_api_key
+        self.filters = filters
+        self.limit = limit
+
+    def _query(self) -> dict[str, Any]:
+        """Helper method to apply filters and query."""
+        params = {}
+
+        params["key"] = self.steam_api_key
+
+        filters = Filters(**self.filters)
+
+        params["filter"] = filters.filter_string
+
+        if self.limit is not None:
+            params["limit"] = self.limit
+
+        response = requests.get(self.URL, params)
+
+        return response.json()["response"]
+
+    def query(self) -> list[Server]:
+        """Thin wrapper for _query() and converts to Pydantic classes."""
+        response = self._query()
+
+        if not response:
+            raise ValueError("Query returned no servers!")
+
+        servers = [Server(**server) for server in response["servers"]]
+
+        return servers
