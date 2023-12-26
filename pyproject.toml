@@ -1,0 +1,47 @@
+[project]
+name = "tf2bots"
+version = "0.1.0"
+description = "Find Bots on Existing TF2 Servers"
+authors = [
+    {name = "jayceslesar", email = "jaycesles@gmail.com"},
+]
+dependencies = [
+    "toml>=0.10.2",
+]
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.8.0",
+    "ruff>=0.1.9",
+    "pytest>=7.4.3",
+]
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[tool.pdm]
+includes = ["src"]
+
+[tool.pdm.scripts]
+format.shell = "ruff format src tests"
+lint.shell = "ruff check src tests"
+lint-fix.shell = "ruff check src tests --fix"
+
+[tool.mypy]
+files = ["src", "tests"]
+explicit_package_bases = true
+
+# See https://github.com/astral-sh/ruff#configuration
+[tool.ruff.lint]
+select = ["F", "E", "I001"]
+ignore = ["D413"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"  # defaults to 3.8, but this repo targets 3.9%
