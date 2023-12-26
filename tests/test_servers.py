@@ -1,7 +1,7 @@
 from typing import Any
 
 import pytest
-from tf2bots.servers import Filters
+from steamapi.servers import Filters
 
 
 @pytest.mark.parametrize("value,expected", [(True, 1), (False, 0), (None, None)])

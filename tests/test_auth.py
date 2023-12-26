@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 import toml
-from tf2bots.auth import STEAM_API_KEY_KEYNAME, get_steam_api_key
+from steamapi.auth import STEAM_API_KEY_KEYNAME, get_steam_api_key
 
 
 @pytest.fixture(scope="session")
