@@ -1,7 +1,7 @@
 [project]
-name = "tf2bots"
+name = "steamapi"
 version = "0.1.0"
-description = "Find Bots on Existing TF2 Servers"
+description = "Opinionated wrapper for the Steam API. Goal is to scrape public data on TF2 severs."
 authors = [
     {name = "jayceslesar", email = "jaycesles@gmail.com"},
 ]
