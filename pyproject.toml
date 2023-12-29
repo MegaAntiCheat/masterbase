@@ -1,5 +1,5 @@
 [project]
-name = "steamapi"
+name = "api"
 version = "0.1.0"
 description = "Opinionated wrapper for the Steam API. Goal is to scrape public data on TF2 severs."
 authors = [

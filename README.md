@@ -12,8 +12,8 @@ Note that it can still be installed with `pip` into an existing project from sou
 clone and install:
 
 ```sh
-git clone https://github.com/MegaAntiCheat/steamapi.git
-cd steamapi
+git clone https://github.com/MegaAntiCheat/api.git
+cd api
 pdm sync
 
 # `pdm sync -G:all` for development dependencies
@@ -25,7 +25,7 @@ Example Usage:
 First one needs to make their steam API available. You can just use it in function calls like below:
 
 ```py
-from steamapi.servers import Query
+from api.servers import Query
 
 
 filters = {
@@ -945,4 +945,4 @@ addr='169.254.189.228:41928' gameport=41928 steamid='90178913460028417' name='Va
 }
 ```
 
-One can also make their steam api key available through the helper methods in `src/steamapi/auth.py` through a json, toml, or environment variable.
+One can also make their steam api key available through the helper methods in `src/api/auth.py` through a json, toml, or environment variable.
