@@ -35,7 +35,7 @@ def session_id_active(session_id: int) -> dict[str, bool]:
 
     return {"is_active": is_active}
 
-
+@get("/close_session", sync_to_thread=False)
 def close_session(session_id: int) -> dict[str, bool]:
     """Close a session out.
 
