@@ -9,6 +9,7 @@ dependencies = [
     "toml>=0.10.2",
     "requests>=2.31.0",
     "pydantic>=2.5.3",
+    "litestar[standard]>=2.4.5",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
