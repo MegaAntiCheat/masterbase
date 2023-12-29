@@ -18,6 +18,14 @@ class DemoSessionManager:
         os.makedirs(self.DEMOS_PATH, exist_ok=True)
 
     def make_or_get_file_handle(self, session_id: str) -> BinaryIO:
+        """Take in a session ID and create or return a file handle.
+
+        Args:
+            session_id: Session ID.
+
+        Returns:
+            File handle for the session_id
+        """
         if session_id not in self.file_handles:
             write_path = os.path.join(self.DEMOS_PATH, f"{session_id}.dem")
             self.file_handles[session_id] = open(write_path, "wb")
@@ -25,7 +33,11 @@ class DemoSessionManager:
         return self.file_handles[session_id]
 
     def handle_demo_data(self, data: dict[str, str | bytes | int]) -> None:
-        """Handle incoming data from a client upload."""
+        """Handle incoming data from a client upload.
+
+        Args:
+            data: dict of {session_id: ..., data: bytes or self.SENTINEL}
+        """
         session_id = str(data["session_id"])
 
         file_handle = self.make_or_get_file_handle(session_id)

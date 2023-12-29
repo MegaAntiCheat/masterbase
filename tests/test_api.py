@@ -50,7 +50,7 @@ def test_demo_streaming(mock_handle, demo_file_path, session_id, tmp_path) -> No
                     data = {"session_id": session_id, "data": encoded_chunk}
                     ws.send_json(data)
 
-    time.sleep(3)
+    time.sleep(3)  # wait for buffer to finish sinking
     with open(write_path, "rb") as actual:
         with open(demo_file_path, "rb") as expected:
             assert actual.read() == expected.read()
