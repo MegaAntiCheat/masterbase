@@ -9,7 +9,7 @@ def generate_uuid4_int() -> int:
 
 
 @get("/session_id", sync_to_thread=False)
-def get_session_id() -> dict[str, int]:
+def session_id() -> dict[str, int]:
     """Return a session ID, as well as persist to database.
 
     This is to help us know what is happening downstream:
@@ -17,9 +17,37 @@ def get_session_id() -> dict[str, int]:
         - If the upload request contains a valid session ID
         - Currently valid upload session ID's so client could reconnect
 
+    Returns:
+        {"session_id": some integer}
     """
     session_id = generate_uuid4_int()
     return {"session_id": session_id}
+
+
+@get("/session_id_active", sync_to_thread=False)
+def session_id_active(session_id: int) -> dict[str, bool]:
+    """Tell if a session ID is active by querying the database.
+
+    Returns:
+        {"is_active": True or False}
+    """
+    is_active = ...
+
+    return {"is_active": is_active}
+
+
+def close_session(session_id: int) -> dict[str, bool]:
+    """Close a session out.
+
+    Returns:
+        {"closed_successfully": True or False}
+    """
+    try:
+        ...
+    except Exception as e:
+        ...
+
+    return {"closed_successfully": ...}
 
 
 @websocket_listener("/demos")
@@ -33,4 +61,4 @@ async def demo_session(data: dict[str, str]) -> dict[str, str]:
     print(data)
 
 
-app = Litestar(route_handlers=[get_session_id, demo_session])
+app = Litestar(route_handlers=[session_id, session_id_active, close_session, demo_session])
