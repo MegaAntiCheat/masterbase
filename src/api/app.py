@@ -1,6 +1,45 @@
+import base64
+import os
+from typing import BinaryIO
 from uuid import uuid4
 
-from litestar import Litestar, get, websocket_listener
+from litestar import Litestar, get, websocket, websocket_listener
+from litestar.di import Provide
+
+
+class DemoSessionManager:
+    """Helper class to manage incoming data streams."""
+
+    DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
+    SENTINEL = -1
+
+    def __init__(self) -> None:
+        self.file_handles: dict[str, BinaryIO] = {}
+        os.makedirs(self.DEMOS_PATH, exist_ok=True)
+
+    def make_or_get_file_handle(self, session_id: str) -> BinaryIO:
+        if session_id not in self.file_handles:
+            write_path = os.path.join(self.DEMOS_PATH, f"{session_id}.dem")
+            self.file_handles[session_id] = open(write_path, "wb")
+
+        return self.file_handles[session_id]
+
+    def handle_demo_data(self, data: dict[str, str | bytes | int]) -> None:
+        """Handle incoming data from a client upload."""
+        session_id = str(data["session_id"])
+
+        file_handle = self.make_or_get_file_handle(session_id)
+
+        _data = base64.b64decode(data["data"])
+
+        if _data == self.SENTINEL:
+            file_handle.close()
+        else:
+            file_handle.write(_data)
+            file_handle.flush()
+
+
+demo_manager = DemoSessionManager()
 
 
 def generate_uuid4_int() -> int:
@@ -36,6 +75,7 @@ def session_id_active(session_id: int) -> dict[str, bool]:
     return {"is_active": is_active}
 
 
+@get("/close_session", sync_to_thread=False)
 def close_session(session_id: int) -> dict[str, bool]:
     """Close a session out.
 
@@ -44,21 +84,20 @@ def close_session(session_id: int) -> dict[str, bool]:
     """
     try:
         ...
-    except Exception as e:
+    except Exception:
         ...
 
     return {"closed_successfully": ...}
 
 
 @websocket_listener("/demos")
-async def demo_session(data: dict[str, str]) -> dict[str, str]:
+async def demo_session(data: dict[str, str | bytes | int]) -> dict[str, str]:
     """Handle incoming data from a client upload.
 
     Smart enough to know where to write data to based on the session ID
-    as to handle reconnecting/duplicates. Will eventually interface
-    with Minio as the file system abstraction layer.
+    as to handle reconnecting/duplicates.
     """
-    print(data)
+    demo_manager.handle_demo_data(data)
 
 
 app = Litestar(route_handlers=[session_id, session_id_active, close_session, demo_session])
