@@ -17,7 +17,7 @@ class DemoSessionManager:
         self.file_handles: dict[str, BinaryIO] = {}
         os.makedirs(self.DEMOS_PATH, exist_ok=True)
 
-    def make_or_get_file_handle(self, session_id: str) -> BinaryIO:
+    def make_or_get_file_handle(self, session_id: int) -> BinaryIO:
         """Take in a session ID and create or return a file handle.
 
         Args:
@@ -38,7 +38,7 @@ class DemoSessionManager:
         Args:
             data: dict of {session_id: ..., data: bytes or self.SENTINEL}
         """
-        session_id = str(data["session_id"])
+        session_id = data["session_id"]
 
         file_handle = self.make_or_get_file_handle(session_id)
 
@@ -49,6 +49,9 @@ class DemoSessionManager:
         else:
             file_handle.write(_data)
             file_handle.flush()
+
+        def close(self, session_id: int) -> None:
+            self.file_handles[session_id].close()
 
 
 demo_manager = DemoSessionManager()
@@ -95,7 +98,7 @@ def close_session(session_id: int) -> dict[str, bool]:
         {"closed_successfully": True or False}
     """
     try:
-        ...
+        demo_manager.close(session_id)
     except Exception:
         ...
 

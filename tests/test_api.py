@@ -33,6 +33,7 @@ def test_session_id(mock_uuid4, session_id) -> None:
 
 @mock.patch("api.app.DemoSessionManager.make_or_get_file_handle")
 def test_demo_streaming(mock_handle, demo_file_path, session_id, tmp_path) -> None:
+    """Test that a demo is completely received by the API and sunk to a file."""
     write_path = f"{tmp_path}.dem"
     with TestClient(app=app) as client:
         mock_handle.return_value = open(write_path, "wb")
