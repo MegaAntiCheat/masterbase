@@ -23,7 +23,9 @@ def upgrade() -> None:
         """
         CREATE TABLE api_keys (
             steam_id varchar PRIMARY KEY,
-            api_key varchar
+            api_key varchar,
+            created_at timestamptz,
+            updated_at timestamptz
         );
         """
     )
@@ -33,7 +35,9 @@ def upgrade() -> None:
         CREATE TABLE sessions (
             session_id varchar PRIMARY KEY,
             api_key varchar,
-            active boolean
+            active boolean,
+            created_at timestamptz,
+            updated_at timestamptz
         );
         """
     )
