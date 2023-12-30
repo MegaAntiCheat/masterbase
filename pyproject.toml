@@ -10,6 +10,8 @@ dependencies = [
     "requests>=2.31.0",
     "pydantic>=2.5.3",
     "litestar[standard]>=2.4.5",
+    "alembic>=1.13.1",
+    "psycopg2-binary>=2.9.9",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -29,9 +31,8 @@ build-backend = "pdm.backend"
 includes = ["src"]
 
 [tool.pdm.scripts]
-format.shell = "ruff format src tests"
+format.shell = "ruff format src tests && ruff check src tests --fix"
 lint.shell = "ruff check src tests"
-lint-fix.shell = "ruff check src tests --fix"
 
 [tool.mypy]
 files = ["src", "tests"]
