@@ -19,8 +19,29 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    pass
+    op.execute(
+        """
+        CREATE TABLE api_keys (
+            steam_id varchar PRIMARY KEY,
+            api_key varchar
+        );
+        """
+    )
 
+    op.execute(
+        """
+        CREATE TABLE sessions (
+            session_id varchar PRIMARY KEY,
+            api_key varchar,
+            active boolean
+        );
+        """
+    )
 
 def downgrade() -> None:
-    pass
+    op.execute(
+        """
+        DROP TABLE api_keys;
+        DROP TABLE sessions;
+        """
+    )

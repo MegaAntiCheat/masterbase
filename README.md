@@ -952,9 +952,24 @@ One can also make their steam api key available through the helper methods in `s
 
 
 ## Database API:
+
 This is a Litestar API
 
 
 ## Database:
 
 This is a postgres database with migrations/schemas managed by Alembic
+
+Schemas are located in `alembic/versions`
+
+Creating a revision is as simple as:
+
+`pdm run alembic --name demos revision -m revision-name`
+
+Upgrading and downgrading:
+
+`pdm run alembic --name demos upgrade head`
+
+`pdm run alembic --name demos downgrade -1`
+
+It is important that downgrades compeltely undo an upgrade, as to not get stuck.
