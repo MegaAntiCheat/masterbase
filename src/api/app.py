@@ -111,6 +111,10 @@ async def demo_session(data: dict[str, str | bytes | int]) -> dict[str, str]:
 
     Smart enough to know where to write data to based on the session ID
     as to handle reconnecting/duplicates.
+
+    Might want to implement something like
+    https://docs.litestar.dev/2/usage/websockets.html#class-based-websocket-handling
+    because it looks cleaner and likely can handle auth/accepting/valid session id better
     """
     demo_manager.handle_demo_data(data)
 
