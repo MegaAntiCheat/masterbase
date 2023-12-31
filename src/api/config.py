@@ -1,6 +1,8 @@
 """Global Config."""
 import os
 
+import sqlalchemy as sa
+
 
 def make_db_url() -> str:
     """Correctly make the database URL."""
@@ -10,3 +12,5 @@ def make_db_url() -> str:
 
 
 demos_db_url = make_db_url()
+
+demos_db_engine = sa.create_engine(demos_db_url, pool_pre_ping=True)
