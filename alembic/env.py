@@ -7,6 +7,8 @@ from alembic import context
 
 import os
 
+from api import config as api_config
+
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
@@ -29,7 +31,7 @@ target_metadata = None
 
 user = os.environ["PG_USER"]
 password = os.environ["PG_PASS"]
-config.set_main_option("sqlalchemy.url", f"postgresql://{user}:{password}@localhost:5432/demos")
+config.set_main_option("sqlalchemy.url", api_config.demos_db_url)
 
 
 def run_migrations_offline() -> None:
