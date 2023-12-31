@@ -1,10 +1,34 @@
 import base64
 import os
-from typing import BinaryIO
+from typing import BinaryIO, cast
 from uuid import uuid4
 
 from litestar import Litestar, get, websocket, websocket_listener
 from litestar.di import Provide
+from sqlalchemy import Engine, create_engine
+
+
+def _make_db_uri() -> str:
+    """Correctly make the database URi."""
+    user = os.environ["PG_USER"]
+    password = os.environ["PG_PASS"]
+    return f"postgresql://{user}:{password}@localhost:5432/demos"
+
+
+def get_db_connection(app: Litestar) -> Engine:
+    """Returns the db engine.
+
+    If it doesn't exist, creates it and saves it in on the application state object
+    """
+    if not getattr(app.state, "engine", None):
+        app.state.engine = websocket_listener(_make_db_uri())
+    return cast("Engine", app.state.engine)
+
+
+async def close_db_connection(app: Litestar) -> None:
+    """Closes the db connection stored in the application State object."""
+    if getattr(app.state, "engine", None):
+        await cast("Engine", app.state.engine).dispose()
 
 
 class DemoSessionManager:
@@ -119,4 +143,8 @@ async def demo_session(data: dict[str, str | bytes | int]) -> dict[str, str]:
     demo_manager.handle_demo_data(data)
 
 
-app = Litestar(route_handlers=[session_id, session_id_active, close_session, demo_session])
+app = Litestar(
+    on_startup=[get_db_connection],
+    route_handlers=[session_id, session_id_active, close_session, demo_session],
+    on_shutdown=[close_db_connection],
+)
