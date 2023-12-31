@@ -216,7 +216,7 @@ def handle_provision(request: Request) -> str:
                     {"steam_id": steam_id, "api_key": api_key, "created_at": created_at, "updated_at": updated_at},
                 )
                 conn.commit()  # commit changes...
-                text = f"You have successfully been authenticated! Your API key is {api_key}! Do not lose this!"
+                text = f"You have successfully been authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"  # noqa
 
             else:
                 text = f"Your steam id of {steam_id} already exists in our DB! If you forgot your API key, please let an admin know."  # noqa
