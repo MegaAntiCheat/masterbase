@@ -32,10 +32,15 @@ def upgrade() -> None:
 
     op.execute(
         """
-        CREATE TABLE sessions (
+        CREATE TABLE demo_sessions (
             session_id varchar PRIMARY KEY,
             api_key varchar,
             active boolean,
+            start_time timestamptz,
+            end_time timestamptz,
+            fake_ip varchar,
+            map varchar,
+            query_by_fake_ip_data jsonb,
             created_at timestamptz,
             updated_at timestamptz
         );
