@@ -1,5 +1,8 @@
-# Steam API Wrapper
-Tools to super objectively interact with the steam API to collect data about servers + players
+# Demo Data Platform API/Lib
+Tools to:
+- super objectively interact with the steam API to collect data about servers + players
+- facilitate collecting and serving demo data
+- API to wrap everything together
 
 
 Installation and Development:
@@ -20,7 +23,7 @@ pdm sync
 ```
 
 
-Example Usage:
+## Steam API
 
 First one needs to make their steam API available. You can just use it in function calls like below:
 
@@ -946,3 +949,27 @@ addr='169.254.189.228:41928' gameport=41928 steamid='90178913460028417' name='Va
 ```
 
 One can also make their steam api key available through the helper methods in `src/api/auth.py` through a json, toml, or environment variable.
+
+
+## Database API:
+
+This is a Litestar API
+
+
+## Database:
+
+This is a postgres database with migrations/schemas managed by Alembic
+
+Schemas are located in `alembic/versions`
+
+Creating a revision is as simple as:
+
+`pdm run alembic --name demos revision -m revision-name`
+
+Upgrading and downgrading:
+
+`pdm run alembic --name demos upgrade head`
+
+`pdm run alembic --name demos downgrade -1`
+
+It is important that downgrades compeltely undo an upgrade, as to not get stuck.
