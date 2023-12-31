@@ -163,7 +163,7 @@ def handle_provision(request: Request) -> str:
     Mostly stolen from https://github.com/TeddiO/pySteamSignIn/blob/master/pysteamsignin/steamsignin.py
 
     Args:
-        data: key value request params from the steam sign in to check against.
+        request: key value request params from the steam sign in to check against.
 
     Returns:
         Page of HTML for user.
