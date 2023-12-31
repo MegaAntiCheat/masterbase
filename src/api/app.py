@@ -1,17 +1,40 @@
 import base64
 import os
 from datetime import datetime, timezone
-from typing import BinaryIO
+from typing import BinaryIO, cast
 from urllib.parse import urlencode
 from uuid import uuid4
 
 import requests
 import sqlalchemy as sa
 from litestar import Litestar, MediaType, Request, get, websocket, websocket_listener
+from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.response import Redirect
+from sqlalchemy import Engine, create_engine
 
-from api.config import demos_db_engine
+
+def _make_db_uri() -> str:
+    """Correctly make the database URi."""
+    user = os.environ["PG_USER"]
+    password = os.environ["PG_PASS"]
+    return f"postgresql://{user}:{password}@localhost:5432/demos"
+
+
+def get_db_connection(app: Litestar) -> Engine:
+    """Returns the db engine.
+
+    If it doesn't exist, creates it and saves it in on the application state object
+    """
+    if not getattr(app.state, "engine", None):
+        app.state.engine = create_engine(_make_db_uri())
+    return cast("Engine", app.state.engine)
+
+
+async def close_db_connection(app: Litestar) -> None:
+    """Closes the db connection stored in the application State object."""
+    if getattr(app.state, "engine", None):
+        await cast("Engine", app.state.engine).dispose()
 
 
 class DemoSessionManager:
@@ -141,8 +164,8 @@ def provision(request: Request) -> Redirect:
     auth_params = {
         "openid.ns": "http://specs.openid.net/auth/2.0",
         "openid.mode": "checkid_setup",
-        "openid.return_to": f"{request.base_url}/handle_provision",
-        "openid.realm": f"{request.base_url}/handle_provision",
+        "openid.return_to": f"{request.base_url}/provision_handler",
+        "openid.realm": f"{request.base_url}/provision_handler",
         "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
         "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
     }
@@ -156,8 +179,8 @@ def provision(request: Request) -> Redirect:
     )
 
 
-@get("/handle_provision", media_type=MediaType.HTML)
-def handle_provision(request: Request) -> str:
+@get("/provision_handler", media_type=MediaType.HTML)
+def provision_handler(request: Request) -> str:
     """Handle a response from Steam.
 
     Mostly stolen from https://github.com/TeddiO/pySteamSignIn/blob/master/pysteamsignin/steamsignin.py
@@ -200,7 +223,8 @@ def handle_provision(request: Request) -> str:
         # admin will then delete the steam ID of the user in the DB and a new sign in will work.
         steam_id = os.path.split(data["openid.claimed_id"])[-1]
 
-        with demos_db_engine.connect() as conn:
+        print(request.app.state.engine)
+        with request.app.state.engine.connect() as conn:
             result = conn.execute(
                 sa.text("SELECT * FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
             ).one_or_none()
@@ -232,4 +256,8 @@ def handle_provision(request: Request) -> str:
         """
 
 
-app = Litestar(route_handlers=[session_id, session_id_active, close_session, demo_session, provision, handle_provision])
+app = Litestar(
+    on_startup=[get_db_connection],
+    route_handlers=[session_id, session_id_active, close_session, demo_session, provision, provision_handler],
+    on_shutdown=[close_db_connection],
+)
