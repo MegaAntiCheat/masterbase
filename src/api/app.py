@@ -208,7 +208,7 @@ def handle_provision(request: Request) -> str:
             if result is None:
                 api_key = uuid4().int
                 created_at = datetime.now().astimezone(timezone.utc).isoformat()
-                updated_at = datetime.now().astimezone(timezone.utc).isoformat()
+                updated_at = created_at
                 conn.execute(
                     sa.text(
                         "INSERT INTO api_keys (steam_id, api_key, created_at, updated_at) VALUES (:steam_id, :api_key, :created_at, :updated_at);"  # noqa
