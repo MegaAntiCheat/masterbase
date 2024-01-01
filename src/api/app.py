@@ -66,11 +66,10 @@ async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> No
     api_key = connection.query_params["api_key"]
 
     async_engine = connection.app.state.async_engine
-
     async with async_engine.connect() as conn:
         result = await conn.execute(sa.text("SELECT * FROM api_keys WHERE api_key = :api_key"), {"api_key": api_key})
-
-        if not result:
+        data = result.all()
+        if not data:
             raise NotAuthorizedException()
 
 
