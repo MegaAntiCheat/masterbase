@@ -12,10 +12,14 @@ from litestar.connection import ASGIConnection
 from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.exceptions import NotAuthorizedException
+from litestar.handlers import WebsocketListener
 from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
+os.makedirs(DEMOS_PATH, exist_ok=True)
 
 
 def _make_db_uri(async_url: bool = False) -> str:
@@ -74,54 +78,9 @@ async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> No
             raise NotAuthorizedException()
 
 
-class DemoSessionManager:
-    """Helper class to manage incoming data streams."""
-
-    DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
-    SENTINEL = -1
-
-    def __init__(self) -> None:
-        self.file_handles: dict[str, BinaryIO] = {}
-        os.makedirs(self.DEMOS_PATH, exist_ok=True)
-
-    def make_or_get_file_handle(self, session_id: int) -> BinaryIO:
-        """Take in a session ID and create or return a file handle.
-
-        Args:
-            session_id: Session ID.
-
-        Returns:
-            File handle for the session_id
-        """
-        if session_id not in self.file_handles:
-            write_path = os.path.join(self.DEMOS_PATH, f"{session_id}.dem")
-            self.file_handles[session_id] = open(write_path, "wb")
-
-        return self.file_handles[session_id]
-
-    def handle_demo_data(self, data: dict[str, str | bytes | int]) -> None:
-        """Handle incoming data from a client upload.
-
-        Args:
-            data: dict of {session_id: ..., data: bytes or self.SENTINEL}
-        """
-        session_id = data["session_id"]
-
-        file_handle = self.make_or_get_file_handle(session_id)
-
-        _data = base64.b64decode(data["data"])
-
-        if _data == self.SENTINEL:
-            file_handle.close()
-        else:
-            file_handle.write(_data)
-            file_handle.flush()
-
-        def close(self, session_id: int) -> None:
-            self.file_handles[session_id].close()
-
-
-demo_manager = DemoSessionManager()
+def create_writer(session_id: str) -> BinaryIO:
+    with open(os.path.join(DEMOS_PATH, session_id), "wb") as handle:
+        yield handle
 
 
 def generate_uuid4_int() -> int:
@@ -165,25 +124,30 @@ def close_session(api_key: str, session_id: int) -> dict[str, bool]:
         {"closed_successfully": True or False}
     """
     try:
-        demo_manager.close(session_id)
+        ...
     except Exception:
         ...
 
     return {"closed_successfully": ...}
 
 
-@websocket_listener("/demos")
-async def demo_session(data: dict[str, str | bytes | int]) -> dict[str, str]:
-    """Handle incoming data from a client upload.
+class DemoHandler(WebsocketListener):
+    path = "/demos"
+    receive_mode = "binary"
 
-    Smart enough to know where to write data to based on the session ID
-    as to handle reconnecting/duplicates.
+    def on_accept(self, socket: websocket, session_id: str) -> None:
+        self.handle = DemoHandler.make_handle(session_id)
 
-    Might want to implement something like
-    https://docs.litestar.dev/2/usage/websockets.html#class-based-websocket-handling
-    because it looks cleaner and likely can handle auth/accepting/valid session id better
-    """
-    demo_manager.handle_demo_data(data)
+    def on_disconnect(self, socket: websocket) -> None:
+        self.handle.close()
+
+    def on_receive(self, data: bytes) -> str:
+        print(data)
+        self.handle.write(data)
+
+    @staticmethod
+    def make_handle(session_id: str) -> BinaryIO:
+        return open(os.path.join(DEMOS_PATH, f"{session_id}.dem"), "wb")
 
 
 @get("/provision", sync_to_thread=False)
@@ -216,7 +180,7 @@ def provision(request: Request) -> Redirect:
     )
 
 
-@get("/provision_handler", media_type=MediaType.HTML)
+@get("/provision_handler", media_type=MediaType.HTML, sync_to_thread=True)
 def provision_handler(request: Request) -> str:
     """Handle a response from Steam.
 
@@ -294,6 +258,6 @@ def provision_handler(request: Request) -> str:
 
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
-    route_handlers=[session_id, session_id_active, close_session, demo_session, provision, provision_handler],
+    route_handlers=[session_id, session_id_active, close_session, DemoHandler, provision, provision_handler],
     on_shutdown=[close_db_connection, close_async_db_connection],
 )
