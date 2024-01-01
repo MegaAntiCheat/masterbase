@@ -141,8 +141,7 @@ class DemoHandler(WebsocketListener):
     def on_disconnect(self, socket: websocket) -> None:
         self.handle.close()
 
-    def on_receive(self, data: bytes) -> str:
-        print(data)
+    def on_receive(self, data: bytes) -> None:
         self.handle.write(data)
 
     @staticmethod
