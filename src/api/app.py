@@ -12,13 +12,18 @@ from litestar.datastructures import State
 from litestar.di import Provide
 from litestar.response import Redirect
 from sqlalchemy import Engine, create_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 
-def _make_db_uri() -> str:
+def _make_db_uri(async_url: bool = False) -> str:
     """Correctly make the database URi."""
     user = os.environ["PG_USER"]
     password = os.environ["PG_PASS"]
-    return f"postgresql://{user}:{password}@localhost:5432/demos"
+    prefix = "postgresql"
+    if async_url:
+        prefix = f"{prefix}+asyncpg"
+
+    return f"{prefix}://{user}:{password}@localhost:5432/demos"
 
 
 def get_db_connection(app: Litestar) -> Engine:
@@ -31,10 +36,26 @@ def get_db_connection(app: Litestar) -> Engine:
     return cast("Engine", app.state.engine)
 
 
-async def close_db_connection(app: Litestar) -> None:
+def close_db_connection(app: Litestar) -> None:
     """Closes the db connection stored in the application State object."""
     if getattr(app.state, "engine", None):
-        await cast("Engine", app.state.engine).dispose()
+        cast("Engine", app.state.engine).dispose()
+
+
+def get_async_db_connection(app: Litestar) -> Engine:
+    """Returns the async db engine.
+
+    If it doesn't exist, creates it and saves it in on the application state object
+    """
+    if not getattr(app.state, "async_engine", None):
+        app.state.async_engine = create_async_engine(_make_db_uri(async_url=True))
+    return cast("AsyncEngine", app.state.async_engine)
+
+
+async def close_async_db_connection(app: Litestar) -> None:
+    """Closes the db connection stored in the application State object."""
+    if getattr(app.state, "async_engine", None):
+        await cast("AsyncEngine", app.state.async_engine).dispose()
 
 
 class DemoSessionManager:
@@ -257,7 +278,7 @@ def provision_handler(request: Request) -> str:
 
 
 app = Litestar(
-    on_startup=[get_db_connection],
+    on_startup=[get_db_connection, get_async_db_connection],
     route_handlers=[session_id, session_id_active, close_session, demo_session, provision, provision_handler],
-    on_shutdown=[close_db_connection],
+    on_shutdown=[close_db_connection, close_async_db_connection],
 )
