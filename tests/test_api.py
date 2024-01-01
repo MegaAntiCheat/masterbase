@@ -5,6 +5,7 @@ from unittest import mock
 
 import pytest
 from api.app import app
+from litestar.exceptions import NotAuthorizedException
 from litestar.testing import TestClient
 
 from tests import data
@@ -25,15 +26,13 @@ def session_id() -> int:
 
 @pytest.fixture
 def client() -> TestClient:
-    return TestClient(app=app)
+    yield TestClient(app=app)
 
 
-@mock.patch("api.app.generate_uuid4_int")
-def test_session_id(mock_uuid4, client, session_id) -> None:
+def test_guard(client, session_id) -> None:
     with client as test_client:
-        mock_uuid4.return_value = session_id
-        api_session_id = test_client.get("/session_id", params={"api_key": "1234"}).json()
-        assert api_session_id["session_id"] == session_id
+        response = test_client.get("/session_id", params={"api_key": "foo"}).json()
+        assert response == {"status_code": 401, "detail": "Unauthorized"}
 
 
 @mock.patch("api.app.DemoHandler.make_handle")
