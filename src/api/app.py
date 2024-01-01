@@ -244,7 +244,6 @@ def provision_handler(request: Request) -> str:
         # admin will then delete the steam ID of the user in the DB and a new sign in will work.
         steam_id = os.path.split(data["openid.claimed_id"])[-1]
 
-        print(request.app.state.engine)
         with request.app.state.engine.connect() as conn:
             result = conn.execute(
                 sa.text("SELECT * FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
