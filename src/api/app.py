@@ -8,8 +8,11 @@ from uuid import uuid4
 import requests
 import sqlalchemy as sa
 from litestar import Litestar, MediaType, Request, get, websocket, websocket_listener
+from litestar.connection import ASGIConnection
 from litestar.datastructures import State
 from litestar.di import Provide
+from litestar.exceptions import NotAuthorizedException
+from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -56,6 +59,19 @@ async def close_async_db_connection(app: Litestar) -> None:
     """Closes the db connection stored in the application State object."""
     if getattr(app.state, "async_engine", None):
         await cast("AsyncEngine", app.state.async_engine).dispose()
+
+
+async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+    """A Guard clause to validate the user's API key."""
+    api_key = connection.query_params["api_key"]
+
+    async_engine = connection.app.state.async_engine
+
+    async with async_engine.connect() as conn:
+        result = await conn.execute(sa.text("SELECT * FROM api_keys WHERE api_key = :api_key"), {"api_key": api_key})
+
+        if not result:
+            raise NotAuthorizedException()
 
 
 class DemoSessionManager:
@@ -113,8 +129,8 @@ def generate_uuid4_int() -> int:
     return uuid4().int
 
 
-@get("/session_id", sync_to_thread=False)
-def session_id() -> dict[str, int]:
+@get("/session_id", guards=[valid_key_guard], sync_to_thread=False)
+def session_id(api_key: str) -> dict[str, int]:
     """Return a session ID, as well as persist to database.
 
     This is to help us know what is happening downstream:
@@ -129,8 +145,8 @@ def session_id() -> dict[str, int]:
     return {"session_id": session_id}
 
 
-@get("/session_id_active", sync_to_thread=False)
-def session_id_active(session_id: int) -> dict[str, bool]:
+@get("/session_id_active", guards=[valid_key_guard], sync_to_thread=False)
+def session_id_active(api_key: str, session_id: int) -> dict[str, bool]:
     """Tell if a session ID is active by querying the database.
 
     Returns:
@@ -141,8 +157,8 @@ def session_id_active(session_id: int) -> dict[str, bool]:
     return {"is_active": is_active}
 
 
-@get("/close_session", sync_to_thread=False)
-def close_session(session_id: int) -> dict[str, bool]:
+@get("/close_session", guards=[valid_key_guard], sync_to_thread=False)
+def close_session(api_key: str, session_id: int) -> dict[str, bool]:
     """Close a session out.
 
     Returns:
