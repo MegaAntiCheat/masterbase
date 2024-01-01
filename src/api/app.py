@@ -78,11 +78,6 @@ async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> No
             raise NotAuthorizedException()
 
 
-def create_writer(session_id: str) -> BinaryIO:
-    with open(os.path.join(DEMOS_PATH, session_id), "wb") as handle:
-        yield handle
-
-
 def generate_uuid4_int() -> int:
     """Seems useless, but makes testing easier."""
     return uuid4().int
