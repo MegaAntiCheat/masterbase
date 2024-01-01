@@ -27,7 +27,7 @@ def session_id() -> int:
 def test_session_id(mock_uuid4, session_id) -> None:
     with TestClient(app=app) as client:
         mock_uuid4.return_value = session_id
-        api_session_id = client.get("/session_id", params={"api_key": "1234"}).json()
+        api_session_id = client.get("/session_id", params={"api_key": "foo"}).json()
         assert api_session_id["session_id"] == session_id
 
 
