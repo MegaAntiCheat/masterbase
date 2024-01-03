@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import requests
 import sqlalchemy as sa
-from litestar import Litestar, MediaType, Request, get, websocket, websocket_listener
+from litestar import Litestar, MediaType, Request, WebSocket, get, post, websocket_listener
 from litestar.connection import ASGIConnection
 from litestar.datastructures import State
 from litestar.di import Provide
@@ -17,6 +17,8 @@ from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+from api.lib import generate_uuid4_int
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
@@ -65,25 +67,82 @@ async def close_async_db_connection(app: Litestar) -> None:
         await cast("AsyncEngine", app.state.async_engine).dispose()
 
 
+async def _check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
+    """Helper util to determine key existence."""
+    async with engine.connect() as conn:
+        result = await conn.execute(sa.text("SELECT * FROM api_keys WHERE api_key = :api_key"), {"api_key": api_key})
+        data = result.all()
+        if not data:
+            return False
+
+        return True
+
+
+async def _check_is_active(engine: AsyncEngine, api_key: str, session_id: str | None = None) -> bool:
+    """Helper util to determine if a session is active."""
+
+    sql = "SELECT * FROM demo_sessions WHERE api_key = :api_key and active = true;"
+    params = {"api_key": api_key}
+
+    if session_id is not None:
+        sql = f"{sql.rstrip(';')} AND session_id = :session_id"
+        params["session_id"] = session_id
+
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            sa.text(sql),
+            params,
+        )
+
+        data = result.all()
+        is_active = bool(data)
+
+        return is_active
+
+
 async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
     """A Guard clause to validate the user's API key."""
     api_key = connection.query_params["api_key"]
 
     async_engine = connection.app.state.async_engine
-    async with async_engine.connect() as conn:
-        result = await conn.execute(sa.text("SELECT * FROM api_keys WHERE api_key = :api_key"), {"api_key": api_key})
-        data = result.all()
-        if not data:
-            raise NotAuthorizedException()
+    exists = await _check_key_exists(async_engine, api_key)
+    if not exists:
+        raise NotAuthorizedException()
 
 
-def generate_uuid4_int() -> int:
-    """Seems useless, but makes testing easier."""
-    return uuid4().int
+async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+    """Assert that the user is not currently in a session."""
+    async_engine = connection.app.state.async_engine
+
+    api_key = connection.query_params["api_key"]
+    is_active = await _check_is_active(async_engine, api_key)
+
+    if is_active:
+        raise NotAuthorizedException(
+            detail="User is already in a session, either remember your session token or close it out at `/close_session`!"  # noqa
+        )
 
 
-@get("/session_id", guards=[valid_key_guard], sync_to_thread=False)
-def session_id(api_key: str) -> dict[str, int]:
+async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+    """Assert that the user is not currently in a session."""
+    async_engine = connection.app.state.async_engine
+
+    api_key = connection.query_params["api_key"]
+    session_id = connection.query_params["session_id"]
+    is_active = await _check_is_active(async_engine, api_key, session_id)
+    if not is_active:
+        raise NotAuthorizedException(
+            detail="User is not in a session, create one at `/session_id`!"  # noqa
+        )
+
+
+@get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
+def session_id(
+    request: Request,
+    api_key: str,
+    fake_ip: str,
+    map: str,
+) -> dict[str, int]:
     """Return a session ID, as well as persist to database.
 
     This is to help us know what is happening downstream:
@@ -94,46 +153,73 @@ def session_id(api_key: str) -> dict[str, int]:
     Returns:
         {"session_id": some integer}
     """
-    session_id = generate_uuid4_int()
-    return {"session_id": session_id}
+
+    _session_id = generate_uuid4_int()
+    engine = request.app.state.engine
+    with engine.connect() as conn:
+        conn.execute(
+            sa.text(
+                "INSERT INTO demo_sessions (session_id, api_key, active, start_time, end_time, fake_ip, map, query_by_fake_ip_data, ingested, created_at, updated_at) VALUES (:session_id, :api_key, :active, :start_time, :end_time, :fake_ip, :map, :query_by_fake_ip_data, :ingested, :created_at, :updated_at);"  # noqa
+            ),
+            {
+                "session_id": _session_id,
+                "api_key": api_key,
+                "active": True,
+                "start_time": datetime.now().astimezone(timezone.utc).isoformat(),
+                "end_time": None,
+                "fake_ip": fake_ip,
+                "map": map,
+                "query_by_fake_ip_data": None,
+                "ingested": False,
+                "created_at": datetime.now().astimezone(timezone.utc).isoformat(),
+                "updated_at": datetime.now().astimezone(timezone.utc).isoformat(),
+            },
+        )
+        conn.commit()
+    return {"session_id": _session_id}
 
 
-@get("/session_id_active", guards=[valid_key_guard], sync_to_thread=False)
-def session_id_active(api_key: str, session_id: int) -> dict[str, bool]:
-    """Tell if a session ID is active by querying the database.
-
-    Returns:
-        {"is_active": True or False}
-    """
-    is_active = ...
-
-    return {"is_active": is_active}
-
-
-@get("/close_session", guards=[valid_key_guard], sync_to_thread=False)
-def close_session(api_key: str, session_id: int) -> dict[str, bool]:
+@get("/close_session", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
+def close_session(request: Request, api_key: str, session_id: str) -> dict[str, bool]:
     """Close a session out.
 
     Returns:
         {"closed_successfully": True or False}
     """
-    try:
-        ...
-    except Exception:
-        ...
+    engine = request.app.state.engine
+    current_time = (datetime.now().astimezone(timezone.utc).isoformat(),)
+    with engine.connect() as conn:
+        conn.execute(
+            sa.text(
+                "UPDATE demo_sessions SET active = False, end_time = :end_time, updated_at = :updated_at WHERE session_id = :session_id AND api_key = :api_key;"  # noqa
+            ),
+            {
+                "api_key": api_key,
+                "session_id": session_id,
+                "end_time": current_time,
+                "updated_at": current_time,
+            },
+        )
+        conn.commit()
 
-    return {"closed_successfully": ...}
+    return {"closed_successfully": True}
 
 
 class DemoHandler(WebsocketListener):
     path = "/demos"
     receive_mode = "binary"
 
-    def on_accept(self, socket: websocket, session_id: str) -> None:
-        self.handle = DemoHandler.make_handle(session_id)
+    async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:
+        exists = await _check_key_exists(socket.app.state.async_engine, api_key)
+        if not exists:
+            await socket.close()
 
-    def on_disconnect(self, socket: websocket) -> None:
+        self.session_id = session_id
+        self.handle = DemoHandler.make_handle(self.session_id)
+
+    def on_disconnect(self, socket: WebSocket) -> None:
         self.handle.close()
+        socket.close()
 
     def on_receive(self, data: bytes) -> None:
         self.handle.write(data)
@@ -251,6 +337,6 @@ def provision_handler(request: Request) -> str:
 
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
-    route_handlers=[session_id, session_id_active, close_session, DemoHandler, provision, provision_handler],
+    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler],
     on_shutdown=[close_db_connection, close_async_db_connection],
 )

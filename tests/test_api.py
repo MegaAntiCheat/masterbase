@@ -36,12 +36,14 @@ def test_guard(client, session_id) -> None:
 
 
 @mock.patch("api.app.DemoHandler.make_handle")
-def test_demo_streaming(handle_func, client, demo_file_path, session_id, tmp_path) -> None:
+@mock.patch("api.app._check_key_exists")
+def test_demo_streaming(handle_func, exists, client, demo_file_path, session_id, tmp_path) -> None:
     """Test that a demo is completely received by the API and sunk to a file."""
     write_path = f"{tmp_path}.dem"
     handle_func.return_value = open(write_path, "wb")
+    exists.return_value = True
     with client as test_client:
-        with test_client.websocket_connect("/demos", params={"session_id": session_id}) as socket:
+        with test_client.websocket_connect("/demos", params={"api_key": "foo"}) as socket:
             with open(demo_file_path, "rb") as f:
                 while True:
                     chunk = f.read(DEMO_CHUNKSIZE_BYTES)

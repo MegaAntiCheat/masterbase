@@ -41,6 +41,7 @@ def upgrade() -> None:
             fake_ip varchar,
             map varchar,
             query_by_fake_ip_data jsonb,
+            ingested boolean,
             created_at timestamptz,
             updated_at timestamptz
         );
