@@ -159,7 +159,7 @@ def session_id(
     with engine.connect() as conn:
         conn.execute(
             sa.text(
-                "INSERT INTO demo_sessions (session_id, api_key, active, start_time, end_time, fake_ip, map, query_by_fake_ip_data, ingested, created_at, updated_at) VALUES (:session_id, :api_key, :active, :start_time, :end_time, :fake_ip, :map, :query_by_fake_ip_data, :ingested, :created_at, :updated_at);"  # noqa
+                "INSERT INTO demo_sessions (session_id, api_key, active, start_time, end_time, fake_ip, map, steam_api_data, ingested, created_at, updated_at) VALUES (:session_id, :api_key, :active, :start_time, :end_time, :fake_ip, :map, :steam_api_data, :ingested, :created_at, :updated_at);"  # noqa
             ),
             {
                 "session_id": _session_id,
@@ -169,7 +169,7 @@ def session_id(
                 "end_time": None,
                 "fake_ip": fake_ip,
                 "map": map,
-                "query_by_fake_ip_data": None,
+                "steam_api_data": None,
                 "ingested": False,
                 "created_at": datetime.now().astimezone(timezone.utc).isoformat(),
                 "updated_at": datetime.now().astimezone(timezone.utc).isoformat(),
@@ -187,7 +187,7 @@ def close_session(request: Request, api_key: str, session_id: str) -> dict[str, 
         {"closed_successfully": True or False}
     """
     engine = request.app.state.engine
-    current_time = (datetime.now().astimezone(timezone.utc).isoformat(),)
+    current_time = datetime.now().astimezone(timezone.utc).isoformat()
     with engine.connect() as conn:
         conn.execute(
             sa.text(
@@ -210,23 +210,45 @@ class DemoHandler(WebsocketListener):
     receive_mode = "binary"
 
     async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:
-        exists = await _check_key_exists(socket.app.state.async_engine, api_key)
+        engine = socket.app.state.async_engine
+        exists = await _check_key_exists(engine, api_key)
         if not exists:
             await socket.close()
 
+        active = await _check_is_active(engine, api_key, session_id)
+        if not active:
+            await socket.close()
+
+        self.api_key = api_key
         self.session_id = session_id
-        self.handle = DemoHandler.make_handle(self.session_id)
+        self.path = os.path.join(DEMOS_PATH, f"{session_id}.dem")
+        self.handle = open(os.path.join(DEMOS_PATH, f"{session_id}.dem"), "wb")
 
     def on_disconnect(self, socket: WebSocket) -> None:
         self.handle.close()
-        socket.close()
+
+        demo = open(self.path, "rb").read()
+
+        current_time = datetime.now().astimezone(timezone.utc).isoformat()
+        engine = socket.app.state.engine
+
+        with engine.connect() as conn:
+            conn.execute(
+                sa.text(
+                    "UPDATE demo_sessions SET active = False, end_time = :end_time, demo = :demo, updated_at = :updated_at WHERE session_id = :session_id AND api_key = :api_key;"  # noqa
+                ),
+                {
+                    "api_key": self.api_key,
+                    "session_id": self.session_id,
+                    "end_time": current_time,
+                    "updated_at": current_time,
+                    "demo": demo,
+                },
+            )
+            conn.commit()
 
     def on_receive(self, data: bytes) -> None:
         self.handle.write(data)
-
-    @staticmethod
-    def make_handle(session_id: str) -> BinaryIO:
-        return open(os.path.join(DEMOS_PATH, f"{session_id}.dem"), "wb")
 
 
 @get("/provision", sync_to_thread=False)
