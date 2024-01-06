@@ -25,7 +25,9 @@ from api.lib import (
     _close_session_with_demo,
     _make_db_uri,
     _start_session,
+    check_steam_id_has_api_key,
     generate_uuid4_int,
+    provision_api_key,
 )
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
@@ -246,27 +248,16 @@ def provision_handler(request: Request) -> str:
         # if it is not in the DB or say that it already exists, and if they forgot it to let an admin know...
         # admin will then delete the steam ID of the user in the DB and a new sign in will work.
         steam_id = os.path.split(data["openid.claimed_id"])[-1]
+        engine = app.state.engine
+        has_key = check_steam_id_has_api_key(engine, steam_id)
 
-        with request.app.state.engine.connect() as conn:
-            result = conn.execute(
-                sa.text("SELECT * FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
-            ).one_or_none()
+        if has_key:
+            api_key = uuid4().int
+            provision_api_key(engine, api_key)
+            text = f"You have successfully been authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"  # noqa
 
-            if result is None:
-                api_key = uuid4().int
-                created_at = datetime.now().astimezone(timezone.utc).isoformat()
-                updated_at = created_at
-                conn.execute(
-                    sa.text(
-                        "INSERT INTO api_keys (steam_id, api_key, created_at, updated_at) VALUES (:steam_id, :api_key, :created_at, :updated_at);"  # noqa
-                    ),
-                    {"steam_id": steam_id, "api_key": api_key, "created_at": created_at, "updated_at": updated_at},
-                )
-                conn.commit()  # commit changes...
-                text = f"You have successfully been authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"  # noqa
-
-            else:
-                text = f"Your steam id of {steam_id} already exists in our DB! If you forgot your API key, please let an admin know."  # noqa
+        else:
+            text = f"Your steam id of {steam_id} already exists in our DB! If you forgot your API key, please let an admin know."  # noqa
 
     return f"""
         <html>

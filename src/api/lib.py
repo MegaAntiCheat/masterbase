@@ -114,3 +114,27 @@ def _close_session_with_demo(
             },
         )
         conn.commit()
+
+
+def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> bool:
+    """Check that a given steam id has an API key or not."""
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text("SELECT * FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
+        ).one_or_none()
+
+        return bool(result)
+
+
+def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
+    """Provision an API key."""
+    with engine.connect() as conn:
+        created_at = datetime.now().astimezone(timezone.utc).isoformat()
+        updated_at = created_at
+        conn.execute(
+            sa.text(
+                "INSERT INTO api_keys (steam_id, api_key, created_at, updated_at) VALUES (:steam_id, :api_key, :created_at, :updated_at);"  # noqa
+            ),
+            {"steam_id": steam_id, "api_key": api_key, "created_at": created_at, "updated_at": updated_at},
+        )
+        conn.commit()
