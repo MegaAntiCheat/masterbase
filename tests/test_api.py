@@ -33,4 +33,3 @@ def test_guard(client, session_id) -> None:
     with client as test_client:
         response = test_client.get("/session_id", params={"api_key": "foo"}).json()
         assert response == {"status_code": 401, "detail": "Unauthorized"}
-

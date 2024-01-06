@@ -18,21 +18,18 @@ from litestar.response import Redirect
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from api.lib import generate_uuid4_int
+from api.lib import (
+    _check_is_active,
+    _check_key_exists,
+    _close_session,
+    _close_session_with_demo,
+    _make_db_uri,
+    _start_session,
+    generate_uuid4_int,
+)
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
-
-
-def _make_db_uri(async_url: bool = False) -> str:
-    """Correctly make the database URi."""
-    user = os.environ["PG_USER"]
-    password = os.environ["PG_PASS"]
-    prefix = "postgresql"
-    if async_url:
-        prefix = f"{prefix}+asyncpg"
-
-    return f"{prefix}://{user}:{password}@localhost:5432/demos"
 
 
 def get_db_connection(app: Litestar) -> Engine:
@@ -65,39 +62,6 @@ async def close_async_db_connection(app: Litestar) -> None:
     """Closes the db connection stored in the application State object."""
     if getattr(app.state, "async_engine", None):
         await cast("AsyncEngine", app.state.async_engine).dispose()
-
-
-async def _check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
-    """Helper util to determine key existence."""
-    async with engine.connect() as conn:
-        result = await conn.execute(sa.text("SELECT * FROM api_keys WHERE api_key = :api_key"), {"api_key": api_key})
-        data = result.all()
-        if not data:
-            return False
-
-        return True
-
-
-async def _check_is_active(engine: AsyncEngine, api_key: str, session_id: str | None = None) -> bool:
-    """Helper util to determine if a session is active."""
-
-    sql = "SELECT * FROM demo_sessions WHERE api_key = :api_key and active = true;"
-    params = {"api_key": api_key}
-
-    if session_id is not None:
-        sql = f"{sql.rstrip(';')} AND session_id = :session_id"
-        params["session_id"] = session_id
-
-    async with engine.connect() as conn:
-        result = await conn.execute(
-            sa.text(sql),
-            params,
-        )
-
-        data = result.all()
-        is_active = bool(data)
-
-        return is_active
 
 
 async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
@@ -156,26 +120,9 @@ def session_id(
 
     _session_id = generate_uuid4_int()
     engine = request.app.state.engine
-    with engine.connect() as conn:
-        conn.execute(
-            sa.text(
-                "INSERT INTO demo_sessions (session_id, api_key, active, start_time, end_time, fake_ip, map, steam_api_data, ingested, created_at, updated_at) VALUES (:session_id, :api_key, :active, :start_time, :end_time, :fake_ip, :map, :steam_api_data, :ingested, :created_at, :updated_at);"  # noqa
-            ),
-            {
-                "session_id": _session_id,
-                "api_key": api_key,
-                "active": True,
-                "start_time": datetime.now().astimezone(timezone.utc).isoformat(),
-                "end_time": None,
-                "fake_ip": fake_ip,
-                "map": map,
-                "steam_api_data": None,
-                "ingested": False,
-                "created_at": datetime.now().astimezone(timezone.utc).isoformat(),
-                "updated_at": datetime.now().astimezone(timezone.utc).isoformat(),
-            },
-        )
-        conn.commit()
+
+    _start_session(engine, api_key, session_id, fake_ip, map)
+
     return {"session_id": _session_id}
 
 
@@ -187,20 +134,8 @@ def close_session(request: Request, api_key: str, session_id: str) -> dict[str, 
         {"closed_successfully": True or False}
     """
     engine = request.app.state.engine
-    current_time = datetime.now().astimezone(timezone.utc).isoformat()
-    with engine.connect() as conn:
-        conn.execute(
-            sa.text(
-                "UPDATE demo_sessions SET active = False, end_time = :end_time, updated_at = :updated_at WHERE session_id = :session_id AND api_key = :api_key;"  # noqa
-            ),
-            {
-                "api_key": api_key,
-                "session_id": session_id,
-                "end_time": current_time,
-                "updated_at": current_time,
-            },
-        )
-        conn.commit()
+    current_time = datetime.now().astimezone(timezone.utc)
+    _close_session(engine, api_key, session_id, current_time)
 
     return {"closed_successfully": True}
 
@@ -229,23 +164,10 @@ class DemoHandler(WebsocketListener):
 
         demo = open(self.path, "rb").read()
 
-        current_time = datetime.now().astimezone(timezone.utc).isoformat()
         engine = socket.app.state.engine
+        current_time = datetime.now().astimezone(timezone.utc)
 
-        with engine.connect() as conn:
-            conn.execute(
-                sa.text(
-                    "UPDATE demo_sessions SET active = False, end_time = :end_time, demo = :demo, updated_at = :updated_at WHERE session_id = :session_id AND api_key = :api_key;"  # noqa
-                ),
-                {
-                    "api_key": self.api_key,
-                    "session_id": self.session_id,
-                    "end_time": current_time,
-                    "updated_at": current_time,
-                    "demo": demo,
-                },
-            )
-            conn.commit()
+        _close_session_with_demo(engine, self.api_key, self.session_id, current_time, demo)
 
     def on_receive(self, data: bytes) -> None:
         self.handle.write(data)
