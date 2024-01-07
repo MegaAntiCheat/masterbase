@@ -1,9 +1,8 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from pydantic import UUID4, BaseModel, Field
-
 from api.lib import generate_uuid4_int
+from pydantic import UUID4, BaseModel, Field
 
 
 class DemoSession(BaseModel):

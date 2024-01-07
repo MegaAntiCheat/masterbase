@@ -7,17 +7,6 @@ from uuid import uuid4
 
 import requests
 import sqlalchemy as sa
-from litestar import Litestar, MediaType, Request, WebSocket, get, post, websocket_listener
-from litestar.connection import ASGIConnection
-from litestar.datastructures import State
-from litestar.di import Provide
-from litestar.exceptions import NotAuthorizedException
-from litestar.handlers import WebsocketListener
-from litestar.handlers.base import BaseRouteHandler
-from litestar.response import Redirect
-from sqlalchemy import Engine, create_engine
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
 from api.lib import (
     _check_is_active,
     _check_key_exists,
@@ -29,6 +18,16 @@ from api.lib import (
     generate_uuid4_int,
     provision_api_key,
 )
+from litestar import Litestar, MediaType, Request, WebSocket, get, post, websocket_listener
+from litestar.connection import ASGIConnection
+from litestar.datastructures import State
+from litestar.di import Provide
+from litestar.exceptions import NotAuthorizedException
+from litestar.handlers import WebsocketListener
+from litestar.handlers.base import BaseRouteHandler
+from litestar.response import Redirect
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
@@ -249,9 +248,9 @@ def provision_handler(request: Request) -> str:
         engine = app.state.engine
         has_key = check_steam_id_has_api_key(engine, steam_id)
 
-        if has_key:
+        if not has_key:
             api_key = uuid4().int
-            provision_api_key(engine, api_key)
+            provision_api_key(engine, steam_id, api_key)
             text = f"Successfully authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"
 
         else:

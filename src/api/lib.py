@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 import sqlalchemy as sa
-from sqlalchemy.ext.asyncio import AsyncEngine, Engine
+from sqlalchemy import Engine
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 
 def _make_db_uri(async_url: bool = False) -> str:
