@@ -60,7 +60,31 @@ def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, 
     with engine.connect() as conn:
         conn.execute(
             sa.text(
-                "INSERT INTO demo_sessions (session_id, api_key, active, start_time, end_time, fake_ip, map, steam_api_data, ingested, created_at, updated_at) VALUES (:session_id, :api_key, :active, :start_time, :end_time, :fake_ip, :map, :steam_api_data, :ingested, :created_at, :updated_at);"  # noqa
+                """INSERT INTO demo_sessions (
+                    session_id, api_key,
+                    active,
+                    start_time,
+                    end_time,
+                    fake_ip,
+                    map,
+                    steam_api_data,
+                    ingested,
+                    created_at,
+                    updated_at
+                ) VALUES (
+                    :session_id,
+                    :api_key,
+                    :active,
+                    :start_time,
+                    :end_time,
+                    :fake_ip,
+                    :map,
+                    :steam_api_data,
+                    :ingested,
+                    :created_at,
+                    :updated_at
+                );
+                """
             ),
             {
                 "session_id": session_id,
@@ -84,7 +108,14 @@ def _close_session(engine: Engine, api_key: str, session_id: str, current_time: 
     with engine.connect() as conn:
         conn.execute(
             sa.text(
-                "UPDATE demo_sessions SET active = False, end_time = :end_time, updated_at = :updated_at WHERE session_id = :session_id AND api_key = :api_key;"  # noqa
+                """UPDATE demo_sessions
+                SET
+                active = False,
+                end_time = :end_time,
+                updated_at = :updated_at
+                WHERE
+                session_id = :session_id AND
+                api_key = :api_key;"""
             ),
             {
                 "api_key": api_key,
@@ -103,7 +134,15 @@ def _close_session_with_demo(
     with engine.connect() as conn:
         conn.execute(
             sa.text(
-                "UPDATE demo_sessions SET active = False, end_time = :end_time, demo = :demo, updated_at = :updated_at WHERE session_id = :session_id AND api_key = :api_key;"  # noqa
+                """UPDATE demo_sessions
+                SET
+                active = False,
+                end_time = :end_time,
+                demo = :demo,
+                updated_at = :updated_at
+                WHERE
+                session_id = :session_id AND
+                api_key = :api_key;"""
             ),
             {
                 "api_key": api_key,
@@ -133,7 +172,10 @@ def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
         updated_at = created_at
         conn.execute(
             sa.text(
-                "INSERT INTO api_keys (steam_id, api_key, created_at, updated_at) VALUES (:steam_id, :api_key, :created_at, :updated_at);"  # noqa
+                """INSERT INTO api_keys (
+                    steam_id, api_key, created_at, updated_at
+                    ) VALUES (
+                        :steam_id, :api_key, :created_at, :updated_at);"""
             ),
             {"steam_id": steam_id, "api_key": api_key, "created_at": created_at, "updated_at": updated_at},
         )

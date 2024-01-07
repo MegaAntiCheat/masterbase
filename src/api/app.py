@@ -85,7 +85,7 @@ async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler)
 
     if is_active:
         raise NotAuthorizedException(
-            detail="User is already in a session, either remember your session token or close it out at `/close_session`!"  # noqa
+            detail="User already in a session, either remember your session token or close it out at `/close_session`!"
         )
 
 
@@ -97,9 +97,7 @@ async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHand
     session_id = connection.query_params["session_id"]
     is_active = await _check_is_active(async_engine, api_key, session_id)
     if not is_active:
-        raise NotAuthorizedException(
-            detail="User is not in a session, create one at `/session_id`!"  # noqa
-        )
+        raise NotAuthorizedException(detail="User is not in a session, create one at `/session_id`!")
 
 
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
@@ -254,10 +252,10 @@ def provision_handler(request: Request) -> str:
         if has_key:
             api_key = uuid4().int
             provision_api_key(engine, api_key)
-            text = f"You have successfully been authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"  # noqa
+            text = f"Successfully authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"
 
         else:
-            text = f"Your steam id of {steam_id} already exists in our DB! If you forgot your API key, please let an admin know."  # noqa
+            text = f"Steam ID {steam_id} already exists! If you forgot your API key, please let an admin know."
 
     return f"""
         <html>
