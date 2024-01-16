@@ -119,8 +119,7 @@ def session_id(
 
     _session_id = generate_uuid4_int()
     engine = request.app.state.engine
-
-    _start_session(engine, api_key, session_id, fake_ip, map)
+    _start_session(engine, api_key, _session_id, fake_ip, map)
 
     return {"session_id": _session_id}
 

@@ -62,7 +62,8 @@ def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, 
         conn.execute(
             sa.text(
                 """INSERT INTO demo_sessions (
-                    session_id, api_key,
+                    session_id,
+                    api_key,
                     active,
                     start_time,
                     end_time,
@@ -94,7 +95,7 @@ def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, 
                 "start_time": datetime.now().astimezone(timezone.utc).isoformat(),
                 "end_time": None,
                 "fake_ip": fake_ip,
-                "map": map,
+                "map": map_str,
                 "steam_api_data": None,
                 "ingested": False,
                 "created_at": datetime.now().astimezone(timezone.utc).isoformat(),
