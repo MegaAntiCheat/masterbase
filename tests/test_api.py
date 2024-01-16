@@ -1,11 +1,7 @@
-import base64
-import time
 from importlib.resources import files
-from unittest import mock
 
 import pytest
 from api.app import app
-from litestar.exceptions import NotAuthorizedException
 from litestar.testing import TestClient
 
 from tests import data
