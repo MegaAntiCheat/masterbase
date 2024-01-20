@@ -189,7 +189,7 @@ async def send_demo_file():
             while True:
                 chunk = f.read(1024)
                 if not chunk:
-                    # also close connection...
+                    # session is auto closed on disconnect.
                     break
                 await socket.send(chunk)
 
