@@ -22,7 +22,7 @@ services:
       POSTGRES_DB: demos
       POSTGRES_USER: $POSTGRES_USER
       POSTGRES_PASSWORD: $POSTGRES_PASSWORD
-    command: pdm run litestar --app-dir src/api run --host 0.0.0.0
+    command: pdm run alembic upgrade head && pdm run litestar --app-dir src/api run --host 0.0.0.0
     depends_on:
       - postgres
     ports:
