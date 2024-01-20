@@ -9,13 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 def _make_db_uri(async_url: bool = False) -> str:
     """Correctly make the database URi."""
-    user = os.environ["PG_USER"]
-    password = os.environ["PG_PASS"]
+    user = os.environ["POSTGRES_USER"]
+    password = os.environ["POSTGRES_PASSWORD"]
     prefix = "postgresql"
     if async_url:
         prefix = f"{prefix}+asyncpg"
 
-    return f"{prefix}://{user}:{password}@localhost:5432/demos"
+    return f"{prefix}://{user}:{password}@postgres:5432/demos"
 
 
 def generate_uuid4_int() -> int:

@@ -29,8 +29,6 @@ target_metadata = None
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-user = os.environ["PG_USER"]
-password = os.environ["PG_PASS"]
 config.set_main_option("sqlalchemy.url", _make_db_uri())
 
 
