@@ -122,7 +122,7 @@ Needed:
 A few environment variables are needed in order to correctly run this.
 `POSTGRES_USER` and `POSTGRES_PASSWORD`.  These are used in the `docker-compose.yml` and are what the DB and API will be configured with.
 
-Once those are exported: ` docker-compose up --build -d`
+Once those are exported: `docker-compose up --build -d`
 
 I also recommend `Dev Containers` vscode plugin that makes attaching and monitoring containers very easy.
 
