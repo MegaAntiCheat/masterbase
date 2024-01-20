@@ -6,13 +6,32 @@ services:
     image: postgres:16.1-bullseye
     environment:
       POSTGRES_DB: demos
-      POSTGRES_USER: ${PG_USER}
-      POSTGRES_PASSWORD: ${PG_PASS}
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+      POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-        - 5432:5432
+        - 8001:5432
     volumes:
       - postgres:/var/lib/postgresql/data
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      POSTGRES_DB: demos
+      POSTGRES_USER: $POSTGRES_USER
+      POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+    command: pdm run litestar --app-dir src/api run --host 0.0.0.0
+    depends_on:
+      - postgres
+    ports:
+      - 8000:8000
+    volumes:
+      - api:/data
+
 volumes:
   postgres:
+    driver: local
+  api:
     driver: local
