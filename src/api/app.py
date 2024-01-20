@@ -34,7 +34,7 @@ def get_db_connection(app: Litestar) -> Engine:
     If it doesn't exist, creates it and saves it in on the application state object
     """
     if not getattr(app.state, "engine", None):
-        app.state.engine = create_engine(_make_db_uri())
+        app.state.engine = create_engine(_make_db_uri(), pool_pre_ping=True)
     return cast("Engine", app.state.engine)
 
 
@@ -50,7 +50,7 @@ def get_async_db_connection(app: Litestar) -> Engine:
     If it doesn't exist, creates it and saves it in on the application state object
     """
     if not getattr(app.state, "async_engine", None):
-        app.state.async_engine = create_async_engine(_make_db_uri(async_url=True))
+        app.state.async_engine = create_async_engine(_make_db_uri(async_url=True), pool_pre_ping=True)
     return cast("AsyncEngine", app.state.async_engine)
 
 
