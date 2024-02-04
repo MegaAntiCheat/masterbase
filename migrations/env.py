@@ -7,7 +7,7 @@ from alembic import context
 
 import os
 
-from api.lib import _make_db_uri
+from src.api.lib import _make_db_uri
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
