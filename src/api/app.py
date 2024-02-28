@@ -88,8 +88,7 @@ async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHand
     async_engine = connection.app.state.async_engine
 
     api_key = connection.query_params["api_key"]
-    session_id = connection.query_params["session_id"]
-    is_active = await _check_is_active(async_engine, api_key, session_id)
+    is_active = await _check_is_active(async_engine, api_key)
     if not is_active:
         raise NotAuthorizedException(detail="User is not in a session, create one at `/session_id`!")
 
@@ -120,7 +119,7 @@ def session_id(
 
 
 @get("/close_session", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
-def close_session(request: Request, api_key: str, session_id: str) -> dict[str, bool]:
+def close_session(request: Request, api_key: str) -> dict[str, bool]:
     """Close a session out.
 
     Returns:
@@ -128,7 +127,7 @@ def close_session(request: Request, api_key: str, session_id: str) -> dict[str, 
     """
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
-    _close_session(engine, api_key, session_id, current_time)
+    _close_session(engine, api_key, current_time)
 
     return {"closed_successfully": True}
 
@@ -143,7 +142,7 @@ class DemoHandler(WebsocketListener):
         if not exists:
             await socket.close()
 
-        active = await _check_is_active(engine, api_key, session_id)
+        active = await _check_is_active(engine, api_key)
         if not active:
             await socket.close()
 
@@ -160,7 +159,7 @@ class DemoHandler(WebsocketListener):
         engine = socket.app.state.engine
         current_time = datetime.now().astimezone(timezone.utc)
 
-        _close_session_with_demo(engine, self.api_key, self.session_id, current_time, demo)
+        _close_session_with_demo(engine, self.api_key, current_time, demo)
 
     def on_receive(self, data: bytes) -> None:
         self.handle.write(data)

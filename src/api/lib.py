@@ -36,15 +36,11 @@ async def _check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
         return True
 
 
-async def _check_is_active(engine: AsyncEngine, api_key: str, session_id: str | None = None) -> bool:
+async def _check_is_active(engine: AsyncEngine, api_key: str) -> bool:
     """Helper util to determine if a session is active."""
 
     sql = "SELECT * FROM demo_sessions WHERE api_key = :api_key and active = true;"
     params = {"api_key": api_key}
-
-    if session_id is not None:
-        sql = f"{sql.rstrip(';')} AND session_id = :session_id"
-        params["session_id"] = session_id
 
     async with engine.connect() as conn:
         result = await conn.execute(
@@ -107,7 +103,7 @@ def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, 
         conn.commit()
 
 
-def _close_session(engine: Engine, api_key: str, session_id: str, current_time: datetime) -> None:
+def _close_session(engine: Engine, api_key: str, current_time: datetime) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
         conn.execute(
@@ -118,12 +114,11 @@ def _close_session(engine: Engine, api_key: str, session_id: str, current_time: 
                 end_time = :end_time,
                 updated_at = :updated_at
                 WHERE
-                session_id = :session_id AND
+                active = True AND
                 api_key = :api_key;"""
             ),
             {
                 "api_key": api_key,
-                "session_id": session_id,
                 "end_time": current_time.isoformat(),
                 "updated_at": current_time.isoformat(),
             },
@@ -132,7 +127,7 @@ def _close_session(engine: Engine, api_key: str, session_id: str, current_time: 
 
 
 def _close_session_with_demo(
-    engine: Engine, api_key: str, session_id: str, current_time: datetime, demo: bytes
+    engine: Engine, api_key: str, current_time: datetime, demo: bytes
 ) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
@@ -145,12 +140,11 @@ def _close_session_with_demo(
                 demo = :demo,
                 updated_at = :updated_at
                 WHERE
-                session_id = :session_id AND
+                active = True AND
                 api_key = :api_key;"""
             ),
             {
                 "api_key": api_key,
-                "session_id": session_id,
                 "end_time": current_time.isoformat(),
                 "updated_at": current_time.isoformat(),
                 "demo": demo,
