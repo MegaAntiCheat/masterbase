@@ -126,9 +126,7 @@ def _close_session(engine: Engine, api_key: str, current_time: datetime) -> None
         conn.commit()
 
 
-def _close_session_with_demo(
-    engine: Engine, api_key: str, current_time: datetime, demo: bytes
-) -> None:
+def _close_session_with_demo(engine: Engine, api_key: str, current_time: datetime, demo: bytes) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
         conn.execute(

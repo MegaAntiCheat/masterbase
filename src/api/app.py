@@ -1,3 +1,4 @@
+import logging
 import os
 from datetime import datetime, timezone
 from typing import cast
@@ -26,6 +27,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_db_connection(app: Litestar) -> Engine:
@@ -140,10 +144,12 @@ class DemoHandler(WebsocketListener):
         engine = socket.app.state.async_engine
         exists = await _check_key_exists(engine, api_key)
         if not exists:
+            logger.info("Invalid API key, closing!")
             await socket.close()
 
         active = await _check_is_active(engine, api_key)
         if not active:
+            logger.info("User is not in a session, closing!")
             await socket.close()
 
         self.api_key = api_key
@@ -152,6 +158,7 @@ class DemoHandler(WebsocketListener):
         self.handle = open(os.path.join(DEMOS_PATH, f"{session_id}.dem"), "wb")
 
     def on_disconnect(self, socket: WebSocket) -> None:
+        logger.info("Received disconnect!")
         self.handle.close()
 
         demo = open(self.path, "rb").read()
