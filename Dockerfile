@@ -12,4 +12,4 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN pdm sync --prod --no-editable
 
-ENTRYPOINT pdm run uvicorn src.api.app:app --host 0.0.0.0 --timeout-keep-alive 20 --ws-ping-interval 10 --ws-ping-timeout 10
+ENTRYPOINT pdm run app

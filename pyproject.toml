@@ -14,6 +14,7 @@ dependencies = [
     "psycopg2-binary>=2.9.9",
     "asyncpg>=0.29.0",
     "greenlet>=3.0.3",
+    "uvicorn>=0.27.1",
 ]
 requires-python = ">=3.11"
 readme = "README.md"
@@ -28,6 +29,9 @@ dev = [
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
+
+[project.scripts]
+app = "api.app:main"
 
 [tool.pdm]
 includes = ["src"]
