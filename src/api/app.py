@@ -238,8 +238,12 @@ def provision_handler(request: Request) -> str:
     # valid_str looks like `is_valid:true`
     valid = bool(valid_str.split(":"))
 
+    print("ASDF")
+
+
     if not valid:
         text = "Could not log you in!"
+
 
     else:
         # great we have the steam id, now lets either provision a new key and display it to the user
@@ -276,7 +280,7 @@ app = Litestar(
 
 
 def main() -> None:
-    config = uvicorn.Config("api.app:app", host="0.0.0.0", log_level="info", ws_ping_interval=None)
+    config = uvicorn.Config("api.app:app", host="127.0.0.1", log_level="info", ws_ping_interval=None)
     server = uvicorn.Server(config)
     server.run()
 
