@@ -30,8 +30,6 @@ dev = [
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
-[project.scripts]
-app = "api.app:main"
 
 [tool.pdm]
 includes = ["src"]
@@ -39,6 +37,7 @@ includes = ["src"]
 [tool.pdm.scripts]
 format.shell = "ruff format src tests && ruff check src tests --fix"
 lint.shell = "ruff check src tests"
+app = "src/api/app.py"
 
 [tool.mypy]
 files = ["src", "tests"]
