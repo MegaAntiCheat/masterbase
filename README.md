@@ -116,7 +116,7 @@ One can also make their steam api key available through the helper methods in `s
 Highly recommend that devs have some sort of postgres tool installed to connect/view data. I prefer [pgcli](https://www.pgcli.com/).
 
 Needed:
-- python `3.11` or greater
+- python `3.10` or greater
 - docker
 
 A few environment variables are needed in order to correctly run this.
