@@ -12,7 +12,7 @@ def _make_db_uri(async_url: bool = False) -> str:
     user = os.environ["POSTGRES_USER"]
     password = os.environ["POSTGRES_PASSWORD"]
     host = os.environ.get("POSTGRES_HOST", "localhost")
-    port = os.environ.get("POSTGRES_PORT", "8001")
+    port = os.environ.get("POSTGRES_PORT", "8050")
     prefix = "postgresql"
     if async_url:
         prefix = f"{prefix}+asyncpg"
