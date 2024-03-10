@@ -153,7 +153,9 @@ def _close_session_with_demo(engine: Engine, api_key: str, current_time: datetim
 
 def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> bool:
     """Check that a given steam id has an API key or not."""
+    print("connecting to db")
     with engine.connect() as conn:
+        print("connected")
         result = conn.execute(
             sa.text("SELECT * FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
         ).one_or_none()

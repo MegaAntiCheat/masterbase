@@ -240,10 +240,8 @@ def provision_handler(request: Request) -> str:
 
     print("ASDF")
 
-
     if not valid:
         text = "Could not log you in!"
-
 
     else:
         # great we have the steam id, now lets either provision a new key and display it to the user
@@ -251,7 +249,10 @@ def provision_handler(request: Request) -> str:
         # admin will then delete the steam ID of the user in the DB and a new sign in will work.
         steam_id = os.path.split(data["openid.claimed_id"])[-1]
         engine = app.state.engine
+        print("checking key")
         has_key = check_steam_id_has_api_key(engine, steam_id)
+
+        print("key checked")
 
         if not has_key:
             api_key = generate_uuid4_int()
@@ -280,7 +281,7 @@ app = Litestar(
 
 
 def main() -> None:
-    config = uvicorn.Config("api.app:app", host="127.0.0.1", log_level="info", ws_ping_interval=None)
+    config = uvicorn.Config("api.app:app", host="0.0.0.0", log_level="info", ws_ping_interval=None)
     server = uvicorn.Server(config)
     server.run()
 
