@@ -125,13 +125,13 @@ A few environment variables are needed in order to correctly run this.
 Build the DB:
 
 ```sh
-docker build -f Dockerfile.db .
+docker build -f Dockerfile.db . -t db
 ```
 
 Run the DB:
 
 ```sh
-docker run -p 8050:5432 -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=demos -d image_tag
+docker run -p 8050:5432 -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=demos -t db
 ```
 
 Run migrations:
