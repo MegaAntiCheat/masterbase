@@ -5,7 +5,6 @@ from typing import cast
 from urllib.parse import urlencode
 
 import requests
-import uvicorn
 from api.lib import (
     _check_is_active,
     _check_key_exists,
@@ -23,6 +22,7 @@ from litestar.exceptions import NotAuthorizedException
 from litestar.handlers import WebsocketListener
 from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect
+from litestar_granian import GranianPlugin
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -240,10 +240,8 @@ def provision_handler(request: Request) -> str:
 
     print("ASDF")
 
-
     if not valid:
         text = "Could not log you in!"
-
 
     else:
         # great we have the steam id, now lets either provision a new key and display it to the user
@@ -273,17 +271,8 @@ def provision_handler(request: Request) -> str:
 
 
 app = Litestar(
+    plugins=[GranianPlugin()],
     on_startup=[get_db_connection, get_async_db_connection],
     route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler],
     on_shutdown=[close_db_connection, close_async_db_connection],
 )
-
-
-def main() -> None:
-    config = uvicorn.Config("api.app:app", host="127.0.0.1", log_level="info", ws_ping_interval=None)
-    server = uvicorn.Server(config)
-    server.run()
-
-
-if __name__ == "__main__":
-    main()
