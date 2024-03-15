@@ -14,4 +14,5 @@ RUN pdm sync --prod --no-editable
 
 EXPOSE 8000
 
-ENTRYPOINT pdm run app
+RUN touch /first_run
+ENTRYPOINT ["/bin/sh", "-c", "if [ -f /first_run ]; then pdm run alembic upgrade head; rm /first_run; fi; exec pdm run app"]
