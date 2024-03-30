@@ -42,7 +42,7 @@ def upgrade() -> None:
             map varchar,
             steam_api_data jsonb,
             ingested boolean,
-            demo bytea,
+            demo_oid oid,
             late_bytes bytea,
             created_at timestamptz,
             updated_at timestamptz

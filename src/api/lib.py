@@ -54,7 +54,7 @@ async def _check_is_active(engine: AsyncEngine, api_key: str) -> bool:
         return is_active
 
 
-def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, map_str) -> None:
+def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, map_str: str) -> None:
     """Start a session and persist to DB."""
     with engine.connect() as conn:
         conn.execute(
@@ -105,6 +105,7 @@ def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, 
 
 def _close_session(engine: Engine, api_key: str, current_time: datetime) -> None:
     """Close out a session in the DB."""
+
     with engine.connect() as conn:
         conn.execute(
             sa.text(
@@ -126,16 +127,17 @@ def _close_session(engine: Engine, api_key: str, current_time: datetime) -> None
         conn.commit()
 
 
-def _close_session_with_demo(engine: Engine, api_key: str, current_time: datetime, demo: bytes) -> None:
+def _close_session_with_demo(engine: Engine, api_key: str, current_time: datetime, demo_path: str) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
+        oid = conn.connection.lobject(mode="w", new_file=demo_path).oid
         conn.execute(
             sa.text(
                 """UPDATE demo_sessions
                 SET
                 active = False,
                 end_time = :end_time,
-                demo = :demo,
+                demo_oid = :demo_oid,
                 updated_at = :updated_at
                 WHERE
                 active = True AND
@@ -145,7 +147,7 @@ def _close_session_with_demo(engine: Engine, api_key: str, current_time: datetim
                 "api_key": api_key,
                 "end_time": current_time.isoformat(),
                 "updated_at": current_time.isoformat(),
-                "demo": demo,
+                "demo_oid": oid,
             },
         )
         conn.commit()
@@ -177,9 +179,7 @@ def _late_bytes(engine: Engine, api_key: str, late_bytes: bytes, current_time: d
 
 def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> bool:
     """Check that a given steam id has an API key or not."""
-    print("connecting to db")
     with engine.connect() as conn:
-        print("connected")
         result = conn.execute(
             sa.text("SELECT * FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
         ).one_or_none()
