@@ -18,7 +18,7 @@ from api.lib import (
     generate_uuid4_int,
     provision_api_key,
 )
-from litestar import Litestar, MediaType, Request, WebSocket, get
+from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException
 from litestar.handlers import WebsocketListener
@@ -138,7 +138,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     return {"closed_successfully": True}
 
 
-@get("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
+@post("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
 def late_bytes(request: Request, api_key: str, late_bytes: bytes) -> dict[str, bool]:
     """Add late bytes to a closed demo session..
 
