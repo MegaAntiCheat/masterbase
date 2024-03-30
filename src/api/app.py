@@ -253,8 +253,6 @@ def provision_handler(request: Request) -> str:
     # valid_str looks like `is_valid:true`
     valid = bool(valid_str.split(":"))
 
-    print("ASDF")
-
     if not valid:
         text = "Could not log you in!"
 
@@ -264,10 +262,7 @@ def provision_handler(request: Request) -> str:
         # admin will then delete the steam ID of the user in the DB and a new sign in will work.
         steam_id = os.path.split(data["openid.claimed_id"])[-1]
         engine = app.state.engine
-        print("checking key")
         has_key = check_steam_id_has_api_key(engine, steam_id)
-
-        print("key checked")
 
         if not has_key:
             api_key = generate_uuid4_int()
@@ -290,7 +285,7 @@ def provision_handler(request: Request) -> str:
 
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
-    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler],
+    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler, late_bytes],
     on_shutdown=[close_db_connection, close_async_db_connection],
 )
 
