@@ -171,7 +171,7 @@ class DemoHandler(WebsocketListener):
         self.api_key = api_key
         self.session_id = session_id
         self.path = os.path.join(DEMOS_PATH, f"{session_id}.dem")
-        self.handle = open(path, "wb")
+        self.handle = open(self.path, "wb")
 
     def on_disconnect(self, socket: WebSocket) -> None:
         logger.info("Received disconnect!")
