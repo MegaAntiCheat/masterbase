@@ -180,7 +180,7 @@ class DemoHandler(WebsocketListener):
         engine = socket.app.state.engine
         current_time = datetime.now().astimezone(timezone.utc)
 
-        _close_session_with_demo(engine, self.api_key, current_time, self.path)
+        _close_session_with_demo(engine, self.api_key, self.session_id, current_time, self.path)
 
         os.remove(self.path)
 

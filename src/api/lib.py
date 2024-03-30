@@ -125,7 +125,7 @@ def _close_session(engine: Engine, api_key: str, current_time: datetime) -> None
         conn.commit()
 
 
-def _close_session_with_demo(engine: Engine, api_key: str, current_time: datetime, demo_path: str) -> None:
+def _close_session_with_demo(engine: Engine, api_key: str, session_id: str, current_time: datetime, demo_path: str) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
         oid = conn.connection.lobject(mode="w", new_file=demo_path).oid
@@ -138,11 +138,12 @@ def _close_session_with_demo(engine: Engine, api_key: str, current_time: datetim
                 demo_oid = :demo_oid,
                 updated_at = :updated_at
                 WHERE
-                active = True AND
-                api_key = :api_key;"""
+                api_key = :api_key AND
+                session_id =: session_id;"""
             ),
             {
                 "api_key": api_key,
+                "session_id": session_id,
                 "end_time": current_time.isoformat(),
                 "updated_at": current_time.isoformat(),
                 "demo_oid": oid,
