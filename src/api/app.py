@@ -171,7 +171,7 @@ class DemoHandler(WebsocketListener):
         self.api_key = api_key
         self.session_id = session_id
         self.path = os.path.join(DEMOS_PATH, f"{session_id}.dem")
-        self.handle = open(os.path.join(DEMOS_PATH, f"{session_id}.dem"), "wb")
+        self.handle = open(path, "wb")
 
     def on_disconnect(self, socket: WebSocket) -> None:
         logger.info("Received disconnect!")
@@ -181,6 +181,8 @@ class DemoHandler(WebsocketListener):
         current_time = datetime.now().astimezone(timezone.utc)
 
         _close_session_with_demo(engine, self.api_key, current_time, self.path)
+
+        os.remove(self.path)
 
     def on_receive(self, data: bytes) -> None:
         self.handle.write(data)
