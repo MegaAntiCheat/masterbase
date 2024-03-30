@@ -283,7 +283,7 @@ def provision_handler(request: Request) -> str:
 
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
-    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler],
+    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler, late_bytes],
     on_shutdown=[close_db_connection, close_async_db_connection],
 )
 
