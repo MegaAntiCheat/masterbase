@@ -43,6 +43,7 @@ def upgrade() -> None:
             steam_api_data jsonb,
             ingested boolean,
             demo bytea,
+            late_bytes bytea,
             created_at timestamptz,
             updated_at timestamptz
         );

@@ -151,6 +151,30 @@ def _close_session_with_demo(engine: Engine, api_key: str, current_time: datetim
         conn.commit()
 
 
+def _late_bytes(engine: Engine, api_key: str, late_bytes: bytes, current_time: datetime) -> None:
+    """Add late bytes to the DB."""
+    with engine.connect() as conn:
+        conn.execute(
+            sa.text(
+                """UPDATE demo_sessions
+                SET
+                late_bytes = :late_bytes
+                updated_at = :updated_at
+                WHERE
+                api_key = :api_key
+                AND updated_at = (
+                    SELECT MAX(updated_at) FROM demo_sessions WHERE api_key = :api_key
+                );"""
+            ),
+            {
+                "api_key": api_key,
+                "late_bytes": late_bytes,
+                "updated_at": current_time.isoformat(),
+            },
+        )
+        conn.commit()
+
+
 def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> bool:
     """Check that a given steam id has an API key or not."""
     print("connecting to db")

@@ -11,6 +11,7 @@ from api.lib import (
     _check_key_exists,
     _close_session,
     _close_session_with_demo,
+    _late_bytes,
     _make_db_uri,
     _start_session,
     check_steam_id_has_api_key,
@@ -128,13 +129,27 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     """Close a session out.
 
     Returns:
-        {"closed_successfully": True or False}
+        {"closed_successfully": True}
     """
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
     _close_session(engine, api_key, current_time)
 
     return {"closed_successfully": True}
+
+
+@get("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
+def late_bytes(request: Request, api_key: str, late_bytes: bytes) -> dict[str, bool]:
+    """Add late bytes to a closed demo session..
+
+    Returns:
+        {"late_bytes": True}
+    """
+    engine = request.app.state.engine
+    current_time = datetime.now().astimezone(timezone.utc)
+    _late_bytes(engine, api_key, late_bytes, current_time)
+
+    return {"late_bytes": True}
 
 
 class DemoHandler(WebsocketListener):
