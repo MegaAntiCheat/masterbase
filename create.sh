@@ -6,10 +6,9 @@ export POSTGRES_PORT=5432
 export API_HOST=172.20.1.20
 
 if [[ "$1" == "--replace" ]]; then
-    docker stop masterbase-db-dev masterbase-api-dev
-    docker rm masterbase-db-dev masterbase-api-dev
-    docker rmi db-dev api-dev
+    docker stop $(docker ps -a -q)
     docker network rm masterbase-network-dev
+    docker system prune -f
 fi
 
 pdm sync -G:all
