@@ -13,6 +13,7 @@ from api.lib import (
     _close_session_with_demo,
     _late_bytes,
     _make_db_uri,
+    _make_demo_path,
     _start_session,
     check_steam_id_has_api_key,
     generate_uuid4_int,
@@ -26,10 +27,6 @@ from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
-
-DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
-os.makedirs(DEMOS_PATH, exist_ok=True)
-
 
 logger = logging.getLogger(__name__)
 
@@ -146,7 +143,7 @@ def late_bytes(request: Request, api_key: str) -> dict[str, bool]:
         {"late_bytes": True}
     """
     engine = request.app.state.engine
-    late_bytes = request.body
+    late_bytes = request.body()
     current_time = datetime.now().astimezone(timezone.utc)
     _late_bytes(engine, api_key, late_bytes, current_time)
 
@@ -171,7 +168,7 @@ class DemoHandler(WebsocketListener):
 
         self.api_key = api_key
         self.session_id = session_id
-        self.path = os.path.join(DEMOS_PATH, f"{session_id}.dem")
+        self.path = _make_demo_path(self.session_id)
         self.handle = open(self.path, "wb")
 
     def on_disconnect(self, socket: WebSocket) -> None:
