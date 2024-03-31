@@ -14,6 +14,8 @@ if [[ $1 == "--replace" ]]; then
     docker stop masterbase-api-dev
     docker rm masterbase-api-dev
     docker rmi masterbase-api-dev
+    docker rm masterbase-db-dev
+    docker rmi masterbase-db-dev
     docker network rm masterbase-network-dev
 fi
 
