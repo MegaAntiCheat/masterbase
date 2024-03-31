@@ -139,13 +139,14 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
 
 @post("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
-def late_bytes(request: Request, api_key: str, late_bytes: bytes) -> dict[str, bool]:
+def late_bytes(request: Request, api_key: str) -> dict[str, bool]:
     """Add late bytes to a closed demo session..
 
     Returns:
         {"late_bytes": True}
     """
     engine = request.app.state.engine
+    late_bytes = request.body
     current_time = datetime.now().astimezone(timezone.utc)
     _late_bytes(engine, api_key, late_bytes, current_time)
 
