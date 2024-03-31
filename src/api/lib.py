@@ -28,6 +28,20 @@ def _make_demo_path(session_id: str) -> os.path:
     return os.path.join(DEMOS_PATH, f"{session_id}.dem")
 
 
+def _get_latest_session_id(engine: Engine, api_key: str) -> str | None:
+    """Get the latest session_id for a user."""
+    with engine.connect() as conn:
+        latest_session_id = conn.execute(
+            # should use a CTE here...
+            sa.text(
+                "SELECT session_id FROM demo_sessions WHERE start_time = (SELECT MAX(start_time) FROM demo_sessions WHERE api_key = :api_key);"  # noqa
+            ),
+            {"api_key": api_key},
+        ).scalar_one_or_none()
+
+    return latest_session_id
+
+
 def generate_uuid4_int() -> int:
     """Seems useless, but makes testing easier."""
     return uuid4().int
@@ -112,38 +126,25 @@ def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, 
 
 def _close_session(engine: Engine, api_key: str, current_time: datetime) -> None:
     """Close out a session in the DB."""
-    # TODO GET THE UNCLOSED SESSION FOR THIS USER AND USE _make_demo_path TO ADD THE DEMO!!!
     with engine.connect() as conn:
-        latest_session_id = conn.execute(
+        conn.execute(
             sa.text(
-                "SELECT session_id FROM demo_sessions WHERE start_time = (SELECT MAX(start_time) FROM demo_sessions where api_key = :api_key);"  # noqa
+                """UPDATE demo_sessions
+                SET
+                active = False,
+                end_time = :end_time,
+                updated_at = :updated_at
+                WHERE
+                active = True AND
+                api_key = :api_key;"""
             ),
-            {"api_key": api_key},
-        ).scalar_one_or_none()
-
-    if latest_session_id is not None:
-        demo_path = _make_demo_path(latest_session_id)
-        _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
-    else:
-        with engine.connect() as conn:
-            conn.execute(
-                sa.text(
-                    """UPDATE demo_sessions
-                    SET
-                    active = False,
-                    end_time = :end_time,
-                    updated_at = :updated_at
-                    WHERE
-                    active = True AND
-                    api_key = :api_key;"""
-                ),
-                {
-                    "api_key": api_key,
-                    "end_time": current_time.isoformat(),
-                    "updated_at": current_time.isoformat(),
-                },
-            )
-            conn.commit()
+            {
+                "api_key": api_key,
+                "end_time": current_time.isoformat(),
+                "updated_at": current_time.isoformat(),
+            },
+        )
+        conn.commit()
 
 
 def _close_session_with_demo(

@@ -11,6 +11,7 @@ from api.lib import (
     _check_key_exists,
     _close_session,
     _close_session_with_demo,
+    _get_latest_session_id,
     _late_bytes,
     _make_db_uri,
     _make_demo_path,
@@ -129,8 +130,21 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
         {"closed_successfully": True}
     """
     engine = request.app.state.engine
+
+    latest_session_id = _get_latest_session_id(engine, api_key)
+    demo_path = _make_demo_path(latest_session_id)
+    demo_path_exists = os.path.exists(demo_path)
+
     current_time = datetime.now().astimezone(timezone.utc)
-    _close_session(engine, api_key, current_time)
+
+    if latest_session_id is None or not demo_path_exists:
+        _close_session(engine, api_key, current_time)
+
+    elif latest_session_id is not None and demo_path_exists:
+        _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
+
+    else:
+        logger.error(f"Found orphaned session and demo at {demo_path}")
 
     return {"closed_successfully": True}
 
