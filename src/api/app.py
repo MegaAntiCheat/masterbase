@@ -158,7 +158,7 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     """
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
-    late_bytes = bytes(data["late_bytes"])
+    late_bytes = bytes.fromhex(data["late_bytes"])
     _late_bytes(engine, api_key, late_bytes, current_time)
 
     return {"late_bytes": True}
