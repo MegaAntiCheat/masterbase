@@ -6,6 +6,8 @@ export POSTGRES_PORT=5432
 export API_HOST=172.20.1.20
 
 if [[ "$1" == "--replace" ]]; then
+    docker kill masterbase-db-dev
+    docker kill masterbase-api-dev
     docker stop masterbase-db-dev
     docker stop masterbase-api-dev
     docker rm -f masterbase-api-dev
