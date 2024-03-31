@@ -176,7 +176,7 @@ def _close_session_with_demo(
         conn.commit()
 
 
-def _late_bytes(engine: Engine, api_key: str, late_bytes: str, current_time: datetime) -> None:
+def _late_bytes(engine: Engine, api_key: str, late_bytes: bytes, current_time: datetime) -> None:
     """Add late bytes to the DB."""
     with engine.connect() as conn:
         conn.execute(
