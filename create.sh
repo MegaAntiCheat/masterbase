@@ -1,3 +1,5 @@
+#!/bin/bash
+
 export STEAM_API_KEY=no
 export POSTGRES_USER=MEGASCATTERBOMB
 export POSTGRES_PASSWORD=masterbase
