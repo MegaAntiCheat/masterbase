@@ -5,6 +5,8 @@ export POSTGRES_HOST=172.20.1.10
 export POSTGRES_PORT=5432
 export API_HOST=172.20.1.20
 
+echo $1
+
 if [[ "$1" == "--replace" ]]; then
     echo "Replacing containers..."
     docker stop masterbase-db-dev
