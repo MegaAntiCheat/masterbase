@@ -8,7 +8,6 @@ export API_HOST=172.20.1.20
 if [[ "$1" == "--replace" ]]; then
     docker stop masterbase-db-dev
     docker stop masterbase-api-dev
-    docker rm -f masterbase-db-dev
     docker rm -f masterbase-api-dev
     docker network rm masterbase-network-dev
     docker rmi masterbase-api-dev
