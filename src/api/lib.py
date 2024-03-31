@@ -6,6 +6,9 @@ import sqlalchemy as sa
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
+os.makedirs(DEMOS_PATH, exist_ok=True)
+
 
 def _make_db_uri(async_url: bool = False) -> str:
     """Correctly make the database URi."""
@@ -18,6 +21,25 @@ def _make_db_uri(async_url: bool = False) -> str:
         prefix = f"{prefix}+asyncpg"
 
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
+
+
+def _make_demo_path(session_id: str) -> os.path:
+    """Make the demo path for the current session."""
+    return os.path.join(DEMOS_PATH, f"{session_id}.dem")
+
+
+def _get_latest_session_id(engine: Engine, api_key: str) -> str | None:
+    """Get the latest session_id for a user."""
+    with engine.connect() as conn:
+        latest_session_id = conn.execute(
+            # should use a CTE here...
+            sa.text(
+                "SELECT session_id FROM demo_sessions WHERE start_time = (SELECT MAX(start_time) FROM demo_sessions WHERE api_key = :api_key);"  # noqa
+            ),
+            {"api_key": api_key},
+        ).scalar_one_or_none()
+
+    return latest_session_id
 
 
 def generate_uuid4_int() -> int:
@@ -38,7 +60,6 @@ async def _check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
 
 async def _check_is_active(engine: AsyncEngine, api_key: str) -> bool:
     """Helper util to determine if a session is active."""
-
     sql = "SELECT * FROM demo_sessions WHERE api_key = :api_key and active = true;"
     params = {"api_key": api_key}
 
@@ -54,7 +75,7 @@ async def _check_is_active(engine: AsyncEngine, api_key: str) -> bool:
         return is_active
 
 
-def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, map_str) -> None:
+def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, map_str: str) -> None:
     """Start a session and persist to DB."""
     with engine.connect() as conn:
         conn.execute(
@@ -126,26 +147,30 @@ def _close_session(engine: Engine, api_key: str, current_time: datetime) -> None
         conn.commit()
 
 
-def _close_session_with_demo(engine: Engine, api_key: str, current_time: datetime, demo: bytes) -> None:
+def _close_session_with_demo(
+    engine: Engine, api_key: str, session_id: str, current_time: datetime, demo_path: str
+) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
+        oid = conn.connection.lobject(mode="w", new_file=demo_path).oid
         conn.execute(
             sa.text(
                 """UPDATE demo_sessions
                 SET
                 active = False,
                 end_time = :end_time,
-                demo = :demo,
+                demo_oid = :demo_oid,
                 updated_at = :updated_at
                 WHERE
-                active = True AND
-                api_key = :api_key;"""
+                api_key = :api_key AND
+                session_id = :session_id;"""
             ),
             {
                 "api_key": api_key,
+                "session_id": session_id,
                 "end_time": current_time.isoformat(),
                 "updated_at": current_time.isoformat(),
-                "demo": demo,
+                "demo_oid": oid,
             },
         )
         conn.commit()

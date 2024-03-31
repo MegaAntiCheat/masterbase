@@ -1,3 +1,5 @@
+#!/bin/bash
+
 export STEAM_API_KEY=no
 export POSTGRES_USER=MEGASCATTERBOMB
 export POSTGRES_PASSWORD=masterbase
@@ -5,10 +7,15 @@ export POSTGRES_HOST=172.20.1.10
 export POSTGRES_PORT=5432
 export API_HOST=172.20.1.20
 
-if [[ "$1" == "--replace" ]]; then
-    docker stop masterbase-db-dev masterbase-api-dev
-    docker rm masterbase-db-dev masterbase-api-dev
-    docker rmi db-dev api-dev
+
+if [[ $1 == "--replace" ]]; then
+    echo "Replacing containers..."
+    docker stop masterbase-db-dev
+    docker stop masterbase-api-dev
+    docker rm masterbase-api-dev
+    docker rmi api-dev
+    docker rm masterbase-db-dev
+    docker rmi db-dev
     docker network rm masterbase-network-dev
 fi
 
