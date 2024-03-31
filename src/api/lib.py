@@ -139,7 +139,7 @@ def _close_session_with_demo(engine: Engine, api_key: str, session_id: str, curr
                 updated_at = :updated_at
                 WHERE
                 api_key = :api_key AND
-                session_id =: session_id;"""
+                session_id = :session_id;"""
             ),
             {
                 "api_key": api_key,
