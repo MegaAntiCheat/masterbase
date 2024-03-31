@@ -121,7 +121,7 @@ def _close_session(engine: Engine, api_key: str, current_time: datetime) -> None
             {"api_key": api_key},
         ).scalar_one_or_none()
 
-    if latest_session_id:
+    if latest_session_id is not None:
         demo_path = _make_demo_path(latest_session_id)
         _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
     else:
