@@ -17,6 +17,7 @@ from api.lib import (
     _make_demo_path,
     _start_session,
     check_steam_id_has_api_key,
+    check_steam_id_is_beta_tester,
     generate_uuid4_int,
     provision_api_key,
 )
@@ -274,6 +275,11 @@ def provision_handler(request: Request) -> str:
         # admin will then delete the steam ID of the user in the DB and a new sign in will work.
         steam_id = os.path.split(data["openid.claimed_id"])[-1]
         engine = app.state.engine
+        is_beta_tester = check_steam_id_is_beta_tester(engine, steam_id)
+
+        if not is_beta_tester:
+            return "<span>You aren't a beta tester! Sorry!</span>"
+
         has_key = check_steam_id_has_api_key(engine, steam_id)
 
         if not has_key:

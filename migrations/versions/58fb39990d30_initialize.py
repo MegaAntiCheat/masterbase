@@ -50,6 +50,14 @@ def upgrade() -> None:
         """
     )
 
+    op.execute(
+        """
+        CREATE TABLE beta_tester_steam_ids (
+            steam_id varchar PRIMARY KEY
+        );
+        """
+    )
+
 def downgrade() -> None:
     op.execute(
         """

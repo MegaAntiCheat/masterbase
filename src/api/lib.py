@@ -210,6 +210,16 @@ def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> bool:
         return bool(result)
 
 
+def check_steam_id_is_beta_tester(engine: Engine, steam_id: str) -> bool:
+    """Check that a given steam id has an API key or not."""
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text("SELECT * FROM beta_tester_steam_ids WHERE steam_id = :steam_id"), {"steam_id": steam_id}
+        ).one_or_none()
+
+        return bool(result)
+
+
 def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
     """Provision an API key."""
     with engine.connect() as conn:
