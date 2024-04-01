@@ -183,7 +183,7 @@ def _late_bytes(engine: Engine, api_key: str, late_bytes: bytes, current_time: d
             sa.text(
                 """UPDATE demo_sessions
                 SET
-                late_bytes = :late_bytes
+                late_bytes = :late_bytes,
                 updated_at = :updated_at
                 WHERE
                 api_key = :api_key
