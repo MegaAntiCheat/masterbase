@@ -35,6 +35,7 @@ def upgrade() -> None:
         CREATE TABLE demo_sessions (
             session_id varchar PRIMARY KEY,
             api_key varchar,
+            demo_name varchar,
             active boolean,
             start_time timestamptz,
             end_time timestamptz,
