@@ -75,7 +75,7 @@ async def _check_is_active(engine: AsyncEngine, api_key: str) -> bool:
         return is_active
 
 
-def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, map_str: str) -> None:
+def _start_session(engine: Engine, api_key: str, session_id: str, demo_name: str, fake_ip: str, map_str: str) -> None:
     """Start a session and persist to DB."""
     with engine.connect() as conn:
         conn.execute(
@@ -83,6 +83,7 @@ def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, 
                 """INSERT INTO demo_sessions (
                     session_id,
                     api_key,
+                    demo_name,
                     active,
                     start_time,
                     end_time,
@@ -95,6 +96,7 @@ def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, 
                 ) VALUES (
                     :session_id,
                     :api_key,
+                    :demo_name,
                     :active,
                     :start_time,
                     :end_time,
@@ -110,6 +112,7 @@ def _start_session(engine: Engine, api_key: str, session_id: str, fake_ip: str, 
             {
                 "session_id": session_id,
                 "api_key": api_key,
+                "demo_name": demo_name,
                 "active": True,
                 "start_time": datetime.now().astimezone(timezone.utc).isoformat(),
                 "end_time": None,

@@ -101,6 +101,7 @@ async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHand
 def session_id(
     request: Request,
     api_key: str,
+    demo_name: str,
     fake_ip: str,
     map: str,
 ) -> dict[str, str]:
@@ -117,7 +118,7 @@ def session_id(
 
     _session_id = generate_uuid4_int()
     engine = request.app.state.engine
-    _start_session(engine, api_key, _session_id, fake_ip, map)
+    _start_session(engine, api_key, _session_id, demo_name, fake_ip, map)
 
     return {"session_id": _session_id}
 
