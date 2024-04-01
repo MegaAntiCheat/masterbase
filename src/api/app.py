@@ -214,11 +214,18 @@ def provision(request: Request) -> Redirect:
     Returns:
         Redirect to the steam sign in
     """
+
+    # enforce https on base_url
+
+    base_url = str(request.base_url)
+    if not base_url.startswith("https"):
+        base_url = base_url.replace("http", "https")
+
     auth_params = {
         "openid.ns": "http://specs.openid.net/auth/2.0",
         "openid.mode": "checkid_setup",
-        "openid.return_to": f"{request.base_url}/provision_handler",
-        "openid.realm": f"{request.base_url}/provision_handler",
+        "openid.return_to": f"{base_url}/provision_handler",
+        "openid.realm": f"{base_url}/provision_handler",
         "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
         "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
     }
