@@ -33,6 +33,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 logger = logging.getLogger(__name__)
 
 
+# use this to ensure client only has one open connection
+streaming_sessions = set()
+
+
 def get_db_connection(app: Litestar) -> Engine:
     """Returns the db engine.
 
@@ -145,6 +149,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     elif latest_session_id is not None and demo_path_exists:
         _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
         os.remove(demo_path)
+        streaming_sessions.remove(latest_session_id)
 
     else:
         logger.error(f"Found orphaned session and demo at {demo_path}")
@@ -183,6 +188,10 @@ class DemoHandler(WebsocketListener):
             logger.info("User is not in a session, closing!")
             await socket.close()
 
+        if session_id in streaming_sessions:
+            logger.info("User is already streaming!")
+            await socket.close()
+
         self.api_key = api_key
         self.session_id = session_id
         self.path = _make_demo_path(self.session_id)
@@ -192,6 +201,8 @@ class DemoHandler(WebsocketListener):
             mode = "ab"
         else:
             mode = "wb"
+
+        streaming_sessions.add(session_id)
         self.handle = open(self.path, mode)
 
     def on_disconnect(self, socket: WebSocket) -> None:
