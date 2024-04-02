@@ -23,7 +23,7 @@ from api.lib import (
 )
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.connection import ASGIConnection
-from litestar.exceptions import NotAuthorizedException
+from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect
@@ -83,7 +83,7 @@ async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler)
     is_active = await _check_is_active(async_engine, api_key)
 
     if is_active:
-        raise NotAuthorizedException(
+        raise PermissionDeniedException(
             detail="User already in a session, either remember your session token or close it out at `/close_session`!"
         )
 
@@ -95,7 +95,7 @@ async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHand
     api_key = connection.query_params["api_key"]
     is_active = await _check_is_active(async_engine, api_key)
     if not is_active:
-        raise NotAuthorizedException(detail="User is not in a session, create one at `/session_id`!")
+        raise PermissionDeniedException(detail="User is not in a session, create one at `/session_id`!")
 
 
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
