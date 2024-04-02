@@ -144,6 +144,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
     elif latest_session_id is not None and demo_path_exists:
         _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
+        os.remove(demo_path)
 
     else:
         logger.error(f"Found orphaned session and demo at {demo_path}")
@@ -185,18 +186,17 @@ class DemoHandler(WebsocketListener):
         self.api_key = api_key
         self.session_id = session_id
         self.path = _make_demo_path(self.session_id)
-        self.handle = open(self.path, "wb")
+
+        demo_path_exists = os.path.exists(self.path)
+        if demo_path_exists:
+            mode = "ab"
+        else:
+            mode = "wb"
+        self.handle = open(self.path, mode)
 
     def on_disconnect(self, socket: WebSocket) -> None:
         logger.info("Received disconnect!")
         self.handle.close()
-
-        engine = socket.app.state.engine
-        current_time = datetime.now().astimezone(timezone.utc)
-
-        _close_session_with_demo(engine, self.api_key, self.session_id, current_time, self.path)
-
-        os.remove(self.path)
 
     def on_receive(self, data: bytes) -> None:
         self.handle.write(data)
