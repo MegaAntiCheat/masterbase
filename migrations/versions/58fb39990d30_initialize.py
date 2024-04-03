@@ -22,8 +22,8 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE TABLE api_keys (
-            steam_id varchar PRIMARY KEY,
-            api_key varchar,
+            steam_id varchar,
+            api_key varchar PRIMARY KEY,
             created_at timestamptz,
             updated_at timestamptz
         );
@@ -33,8 +33,8 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE TABLE demo_sessions (
-            session_id varchar PRIMARY KEY,
-            api_key varchar,
+            session_id varchar,
+            api_key varchar REFERENCES api_keys ON UPDATE CASCADE,
             demo_name varchar,
             active boolean,
             start_time timestamptz,
@@ -46,19 +46,9 @@ def upgrade() -> None:
             demo_oid oid,
             late_bytes bytea,
             created_at timestamptz,
-            updated_at timestamptz
+            updated_at timestamptz,
+            PRIMARY KEY (session_id, api_key)
         );
-        """
-    )
-
-    op.execute(
-        """
-            ALTER TABLE demo_sessions
-            ADD CONSTRAINT fk_api_key
-            FOREIGN KEY (api_key)
-            REFERENCES api_keys(api_key)
-            ON UPDATE CASCADE
-            ;
         """
     )
 
