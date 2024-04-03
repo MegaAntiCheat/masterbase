@@ -213,6 +213,13 @@ def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
         return result
 
 
+def invalidate_api_key(engine: Engine, steam_id: str) -> str | None:
+    """Invalidate an API key."""
+    with engine.connect() as conn:
+        conn.execute(sa.text("DELETE FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id})
+        conn.commit()
+
+
 def check_steam_id_is_beta_tester(engine: Engine, steam_id: str) -> bool:
     """Check that a given steam id has an API key or not."""
     with engine.connect() as conn:
