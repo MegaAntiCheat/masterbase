@@ -149,7 +149,10 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     elif latest_session_id is not None and demo_path_exists:
         _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
         os.remove(demo_path)
-        streaming_sessions.remove(latest_session_id)
+
+        # this should never happen but lets be safe
+        if latest_session_id in streaming_sessions:
+            streaming_sessions.remove(latest_session_id)
 
     else:
         logger.error(f"Found orphaned session and demo at {demo_path}")
@@ -202,12 +205,13 @@ class DemoHandler(WebsocketListener):
         else:
             mode = "wb"
 
-        streaming_sessions.add(session_id)
+        streaming_sessions.add(self.session_id)
         self.handle = open(self.path, mode)
 
     def on_disconnect(self, socket: WebSocket) -> None:
         logger.info("Received disconnect!")
         self.handle.close()
+        streaming_sessions.remove(self.session_id)
 
     def on_receive(self, data: bytes) -> None:
         self.handle.write(data)
