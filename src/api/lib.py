@@ -203,14 +203,14 @@ def _late_bytes(engine: Engine, api_key: str, late_bytes: bytes, current_time: d
         conn.commit()
 
 
-def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> bool:
+def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
     """Check that a given steam id has an API key or not."""
     with engine.connect() as conn:
         result = conn.execute(
-            sa.text("SELECT * FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
-        ).one_or_none()
+            sa.text("SELECT api_key FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
+        ).scalar_one_or_none()
 
-        return bool(result)
+        return result
 
 
 def check_steam_id_is_beta_tester(engine: Engine, steam_id: str) -> bool:

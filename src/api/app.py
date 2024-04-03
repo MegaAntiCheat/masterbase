@@ -303,15 +303,14 @@ def provision_handler(request: Request) -> str:
         if not is_beta_tester:
             return "<span>You aren't a beta tester! Sorry!</span>"
 
-        has_key = check_steam_id_has_api_key(engine, steam_id)
+        api_key = check_steam_id_has_api_key(engine, steam_id)
 
-        if not has_key:
+        if api_key is None:
             api_key = generate_uuid4_int()
             provision_api_key(engine, steam_id, api_key)
-            text = f"Successfully authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"
 
-        else:
-            text = f"Steam ID {steam_id} already exists! If you forgot your API key, please let an admin know."
+        text = f"Successfully authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"
+
 
     return f"""
         <html>
