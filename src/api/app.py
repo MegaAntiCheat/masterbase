@@ -19,8 +19,8 @@ from api.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     generate_uuid4_int,
-    invalidate_api_key,
     provision_api_key,
+    update_api_key,
 )
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.connection import ASGIConnection
@@ -305,16 +305,17 @@ def provision_handler(request: Request) -> str:
             return "<span>You aren't a beta tester! Sorry!</span>"
 
         api_key = check_steam_id_has_api_key(engine, steam_id)
+        new_api_key = generate_uuid4_int()
         invalidated_text = ""
         if api_key is not None:
             # invalidate old API key and provision a new one
             invalidated_text = "Your old key was invalidated!"
-            invalidate_api_key(engine, steam_id)
+            update_api_key(engine, steam_id, new_api_key)
 
-        api_key = generate_uuid4_int()
-        provision_api_key(engine, steam_id, api_key)
+        else:
+            provision_api_key(engine, steam_id, new_api_key)
 
-        text = f"Successfully authenticated! Your API key is {api_key}! {invalidated_text} Do not lose this as the client needs it!"  # noqa
+        text = f"Successfully authenticated! Your API key is {new_api_key}! {invalidated_text} Do not lose this as the client needs it!"  # noqa
 
     return f"""
         <html>

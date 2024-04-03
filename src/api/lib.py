@@ -213,10 +213,13 @@ def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
         return result
 
 
-def invalidate_api_key(engine: Engine, steam_id: str) -> str | None:
-    """Invalidate an API key."""
+def update_api_key(engine: Engine, steam_id: str, new_api_key) -> str | None:
+    """Update an API key."""
     with engine.connect() as conn:
-        conn.execute(sa.text("DELETE FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id})
+        conn.execute(
+            sa.text("UPDATE api_keys SET api_key = :new_api_key WHERE steam_id = :steam_id"),
+            {"steam_id": steam_id, "new_api_key": new_api_key},
+        )
         conn.commit()
 
 
