@@ -53,6 +53,17 @@ def upgrade() -> None:
 
     op.execute(
         """
+            ALTER TABLE demo_sessions
+            ADD CONSTRAINT fk_api_key
+            FOREIGN KEY (api_key)
+            REFERENCES api_keys(api_key)
+            ON UPDATE CASCADE
+            ;
+        """
+    )
+
+    op.execute(
+        """
         CREATE TABLE beta_tester_steam_ids (
             steam_id varchar PRIMARY KEY
         );
