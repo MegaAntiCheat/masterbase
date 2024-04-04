@@ -17,12 +17,15 @@ from api.lib import (
     _make_demo_path,
     _start_session,
     check_steam_id_has_api_key,
+    check_steam_id_is_beta_tester,
     generate_uuid4_int,
+    is_limited_account,
     provision_api_key,
+    update_api_key,
 )
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.connection import ASGIConnection
-from litestar.exceptions import NotAuthorizedException
+from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect
@@ -30,6 +33,10 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 logger = logging.getLogger(__name__)
+
+
+# use this to ensure client only has one open connection
+streaming_sessions = set()
 
 
 def get_db_connection(app: Litestar) -> Engine:
@@ -82,7 +89,7 @@ async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler)
     is_active = await _check_is_active(async_engine, api_key)
 
     if is_active:
-        raise NotAuthorizedException(
+        raise PermissionDeniedException(
             detail="User already in a session, either remember your session token or close it out at `/close_session`!"
         )
 
@@ -94,7 +101,7 @@ async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHand
     api_key = connection.query_params["api_key"]
     is_active = await _check_is_active(async_engine, api_key)
     if not is_active:
-        raise NotAuthorizedException(detail="User is not in a session, create one at `/session_id`!")
+        raise PermissionDeniedException(detail="User is not in a session, create one at `/session_id`!")
 
 
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
@@ -143,6 +150,11 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
     elif latest_session_id is not None and demo_path_exists:
         _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
+        os.remove(demo_path)
+
+        # this should never happen but lets be safe
+        if latest_session_id in streaming_sessions:
+            streaming_sessions.remove(latest_session_id)
 
     else:
         logger.error(f"Found orphaned session and demo at {demo_path}")
@@ -181,21 +193,27 @@ class DemoHandler(WebsocketListener):
             logger.info("User is not in a session, closing!")
             await socket.close()
 
+        if session_id in streaming_sessions:
+            logger.info("User is already streaming!")
+            await socket.close()
+
         self.api_key = api_key
         self.session_id = session_id
         self.path = _make_demo_path(self.session_id)
-        self.handle = open(self.path, "wb")
+
+        demo_path_exists = os.path.exists(self.path)
+        if demo_path_exists:
+            mode = "ab"
+        else:
+            mode = "wb"
+
+        streaming_sessions.add(self.session_id)
+        self.handle = open(self.path, mode)
 
     def on_disconnect(self, socket: WebSocket) -> None:
         logger.info("Received disconnect!")
         self.handle.close()
-
-        engine = socket.app.state.engine
-        current_time = datetime.now().astimezone(timezone.utc)
-
-        _close_session_with_demo(engine, self.api_key, self.session_id, current_time, self.path)
-
-        os.remove(self.path)
+        streaming_sessions.remove(self.session_id)
 
     def on_receive(self, data: bytes) -> None:
         self.handle.write(data)
@@ -213,11 +231,18 @@ def provision(request: Request) -> Redirect:
     Returns:
         Redirect to the steam sign in
     """
+
+    # enforce https on base_url
+
+    base_url = str(request.base_url)
+    if not base_url.startswith("https") and not os.environ["DEVELOPMENT"]:
+        base_url = base_url.replace("http", "https")
+
     auth_params = {
         "openid.ns": "http://specs.openid.net/auth/2.0",
         "openid.mode": "checkid_setup",
-        "openid.return_to": f"{request.base_url}/provision_handler",
-        "openid.realm": f"{request.base_url}/provision_handler",
+        "openid.return_to": f"{base_url}/provision_handler",
+        "openid.realm": f"{base_url}/provision_handler",
         "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
         "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
     }
@@ -274,16 +299,29 @@ def provision_handler(request: Request) -> str:
         # if it is not in the DB or say that it already exists, and if they forgot it to let an admin know...
         # admin will then delete the steam ID of the user in the DB and a new sign in will work.
         steam_id = os.path.split(data["openid.claimed_id"])[-1]
-        engine = app.state.engine
-        has_key = check_steam_id_has_api_key(engine, steam_id)
+        # block limited accounts...
+        limited = is_limited_account(steam_id)
+        if limited:
+            return
 
-        if not has_key:
-            api_key = generate_uuid4_int()
-            provision_api_key(engine, steam_id, api_key)
-            text = f"Successfully authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"
+        engine = app.state.engine
+        is_beta_tester = check_steam_id_is_beta_tester(engine, steam_id)
+
+        if not is_beta_tester:
+            return "<span>You aren't a beta tester! Sorry!</span>"
+
+        api_key = check_steam_id_has_api_key(engine, steam_id)
+        new_api_key = generate_uuid4_int()
+        invalidated_text = ""
+        if api_key is not None:
+            # invalidate old API key and provision a new one
+            invalidated_text = "Your old key was invalidated!"
+            update_api_key(engine, steam_id, new_api_key)
 
         else:
-            text = f"Steam ID {steam_id} already exists! If you forgot your API key, please let an admin know."
+            provision_api_key(engine, steam_id, new_api_key)
+
+        text = f"Successfully authenticated! Your API key is {new_api_key}! {invalidated_text} Do not lose this as the client needs it!"  # noqa
 
     return f"""
         <html>

@@ -1,4 +1,8 @@
+
 FROM python:3.11-slim-buster
+
+ARG DEVELOPMENT
+ENV DEVELOPMENT=$DEVELOPMENT
 
 WORKDIR /home
 
