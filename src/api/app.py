@@ -19,6 +19,7 @@ from api.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     generate_uuid4_int,
+    is_limited_account,
     provision_api_key,
     update_api_key,
 )
@@ -298,6 +299,11 @@ def provision_handler(request: Request) -> str:
         # if it is not in the DB or say that it already exists, and if they forgot it to let an admin know...
         # admin will then delete the steam ID of the user in the DB and a new sign in will work.
         steam_id = os.path.split(data["openid.claimed_id"])[-1]
+        # block limited accounts...
+        limited = is_limited_account(steam_id)
+        if limited:
+            return
+
         engine = app.state.engine
         is_beta_tester = check_steam_id_is_beta_tester(engine, steam_id)
 

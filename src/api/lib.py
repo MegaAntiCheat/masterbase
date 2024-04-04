@@ -1,7 +1,9 @@
 import os
 from datetime import datetime, timezone
 from uuid import uuid4
+from xml.etree import ElementTree
 
+import requests
 import sqlalchemy as sa
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -248,3 +250,13 @@ def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
             {"steam_id": steam_id, "api_key": api_key, "created_at": created_at, "updated_at": updated_at},
         )
         conn.commit()
+
+
+def is_limited_account(steam_id: str) -> bool:
+    """Check if the account is limited or not."""
+    response = requests.get(f"https://steamcommunity.com/profiles/{steam_id}?xml=1")
+    tree = ElementTree.fromstring(response.content)
+    for element in tree:
+        if element.tag == "isLimitedAccount":
+            limited = bool(int(element.text))
+            return limited
