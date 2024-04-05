@@ -1,7 +1,9 @@
 import os
 from datetime import datetime, timezone
 from uuid import uuid4
+from xml.etree import ElementTree
 
+import requests
 import sqlalchemy as sa
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -203,11 +205,31 @@ def _late_bytes(engine: Engine, api_key: str, late_bytes: bytes, current_time: d
         conn.commit()
 
 
-def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> bool:
+def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
     """Check that a given steam id has an API key or not."""
     with engine.connect() as conn:
         result = conn.execute(
-            sa.text("SELECT * FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
+            sa.text("SELECT api_key FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
+        ).scalar_one_or_none()
+
+        return result
+
+
+def update_api_key(engine: Engine, steam_id: str, new_api_key) -> str | None:
+    """Update an API key."""
+    with engine.connect() as conn:
+        conn.execute(
+            sa.text("UPDATE api_keys SET api_key = :new_api_key WHERE steam_id = :steam_id"),
+            {"steam_id": steam_id, "new_api_key": new_api_key},
+        )
+        conn.commit()
+
+
+def check_steam_id_is_beta_tester(engine: Engine, steam_id: str) -> bool:
+    """Check that a given steam id has an API key or not."""
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text("SELECT * FROM beta_tester_steam_ids WHERE steam_id = :steam_id"), {"steam_id": steam_id}
         ).one_or_none()
 
         return bool(result)
@@ -279,3 +301,13 @@ def get_user_demo_info(engine: Engine, api_key: str) -> list[str] | None:
             return None
 
         return list(result)
+    
+    
+def is_limited_account(steam_id: str) -> bool:
+    """Check if the account is limited or not."""
+    response = requests.get(f"https://steamcommunity.com/profiles/{steam_id}?xml=1")
+    tree = ElementTree.fromstring(response.content)
+    for element in tree:
+        if element.tag == "isLimitedAccount":
+            limited = bool(int(element.text))
+            return limited
