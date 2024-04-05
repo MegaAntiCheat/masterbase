@@ -1,9 +1,9 @@
 import json
 import os
-from typing import Any
-
-import requests
 import toml
+
+from requests import get
+from typing import Any
 from pydantic import BaseModel
 
 STEAM_API_KEY_KEYNAME = "STEAM_API_KEY"
@@ -201,7 +201,7 @@ class Filters:
         return "".join(filters)
 
     @property
-    def filter_string(self) -> dict[str, str]:
+    def filter_string(self) -> str:
         return self._make_filter_str()
 
     def add_nor_filter(self) -> None:
@@ -280,7 +280,7 @@ class Server(BaseModel):
         for query_type, query_key in self.QUERY_TYPES.items():
             params["query_type"] = query_type
 
-            response = requests.get(self.URL, params)
+            response = get(self.URL, params)
             server_data[query_key] = response.json()["response"][query_key]
 
         return server_data
@@ -316,7 +316,7 @@ class Query:
         if self.limit is not None:
             params["limit"] = self.limit
 
-        response = requests.get(self.URL, params)
+        response = get(self.URL, params)
 
         return response.json()["response"]
 

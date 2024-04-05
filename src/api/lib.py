@@ -228,3 +228,54 @@ def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
             {"steam_id": steam_id, "api_key": api_key, "created_at": created_at, "updated_at": updated_at},
         )
         conn.commit()
+
+
+def get_api_key_info(engine: Engine, steam_id: str) -> list[str] | None:
+    """
+    Get the metadata for an API key (i.e. when was it created, when was it updated)
+
+    Assumptions: the steam_id has an already provisioned API key.
+    """
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text("SELECT created_at, updated_at FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
+        ).one_or_none()
+
+        if not result:
+            return None
+
+        return list(result)
+
+
+def get_api_key(engine: Engine, steam_id: str) -> str | None:
+    """
+    Get an API key from the DB for the given steam ID
+    """
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text("SELECT api_key FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
+        ).one_or_none()
+
+        if not result:
+            return None
+
+        return list(result)[0]
+
+
+def get_user_demo_info(engine: Engine, api_key: str) -> list[str] | None:
+    """
+    Get the number of demos that the given api_key has uploaded
+    """
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text("SELECT COUNT(*), "
+                    "demo_name, "
+                    "map, "
+                    "created_time, "
+                    "end_time FROM demo_sessions WHERE api_key = :api_key"), {"api_key": api_key}
+        ).one_or_none()
+
+        if not result:
+            return None
+
+        return list(result)

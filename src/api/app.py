@@ -1,11 +1,22 @@
-import logging
 import os
+import logging
+import requests
 from datetime import datetime, timezone
-from typing import cast
+from typing import cast, BinaryIO
 from urllib.parse import urlencode
 
-import requests
-import uvicorn
+from multidict import MultiDict
+from uvicorn import Config, Server
+
+from litestar import Litestar, MediaType, Request, WebSocket, get, post
+from litestar.connection import ASGIConnection
+from litestar.exceptions import NotAuthorizedException
+from litestar.handlers import WebsocketListener
+from litestar.handlers.base import BaseRouteHandler
+from litestar.response import Redirect
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.ext.asyncio import create_async_engine
+
 from api.lib import (
     _check_is_active,
     _check_key_exists,
@@ -20,14 +31,6 @@ from api.lib import (
     generate_uuid4_int,
     provision_api_key,
 )
-from litestar import Litestar, MediaType, Request, WebSocket, get, post
-from litestar.connection import ASGIConnection
-from litestar.exceptions import NotAuthorizedException
-from litestar.handlers import WebsocketListener
-from litestar.handlers.base import BaseRouteHandler
-from litestar.response import Redirect
-from sqlalchemy import Engine, create_engine
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +119,7 @@ def session_id(
         {"session_id": some integer}
     """
 
-    _session_id = generate_uuid4_int()
+    _session_id = str(generate_uuid4_int())
     engine = request.app.state.engine
     _start_session(engine, api_key, _session_id, demo_name, fake_ip, map)
 
@@ -168,6 +171,10 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
 class DemoHandler(WebsocketListener):
     path = "/demos"
     receive_mode = "binary"
+    # populated via 'on_accept'
+    api_key: str = None
+    session_id: str = None
+    handle: BinaryIO = None
 
     async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:
         engine = socket.app.state.async_engine
@@ -201,6 +208,42 @@ class DemoHandler(WebsocketListener):
         self.handle.write(data)
 
 
+def process_openid_response(request: Request) -> tuple[MultiDict, str]:
+    data = request.query_params
+    validation_args = {
+        "openid.assoc_handle": data["openid.assoc_handle"],
+        "openid.signed": data["openid.signed"],
+        "openid.sig": data["openid.sig"],
+        "openid.ns": data["openid.ns"],
+    }
+
+    signed_args = data["openid.signed"].split(",")
+    for item in signed_args:
+        arg = f"openid.{item}"
+        if data[arg] not in validation_args:
+            validation_args[arg] = data[arg]
+
+    validation_args["openid.mode"] = "check_authentication"
+    parsed_args = urlencode(validation_args).encode()
+
+    response = requests.get("https://steamcommunity.com/openid/login", params=parsed_args)
+    return data, response.content.decode('utf8')
+
+
+@get("/bad_login", sync_to_thread=False)
+def login_failed(request: Request) -> str:
+    text = "Could not log you in!"
+    return f"""
+            <html>
+                <body>
+                    <div>
+                        <span>{text}</span>
+                    </div>
+                </body>
+            </html>
+            """
+
+
 @get("/provision", sync_to_thread=False)
 def provision(request: Request) -> Redirect:
     """Provision a login/API key.
@@ -231,8 +274,66 @@ def provision(request: Request) -> Redirect:
     )
 
 
+@get("/login", sync_to_thread=False)
+def login(request: Request) -> Redirect:
+    auth_params = {
+        "openid.ns": "http://specs.openid.net/auth/2.0",
+        "openid.mode": "checkid_setup",
+        "openid.return_to": f"{request.base_url}/profile",
+        "openid.realm": f"{request.base_url}/profile",
+        "openid.identity": "http://specs.openid.net/auth/2.0/identifier_select",
+        "openid.claimed_id": "http://specs.openid.net/auth/2.0/identifier_select",
+    }
+
+    encoded = urlencode(auth_params)
+
+    return Redirect(
+        path=f"https://steamcommunity.com/openid/login?{encoded}",
+        status_code=303,
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+
+@get("/profile", media_type=MediaType.HTML, sync_to_thread=True)
+def profile(request: Request) -> str | Redirect:
+    """
+    Use Steam OpenID response to authenticate access, then return stored DB detailing that players profile.
+
+    Args:
+        request: key value request params from the steam sign in to check against.
+
+    Returns:
+        Page of HTML for user.
+    """
+    data, decoded = process_openid_response(request)
+
+    _, valid_str, _ = decoded.split("\n")
+    # valid_str looks like `is_valid:true`
+    valid = bool(valid_str.split(":"))
+
+    if not valid:
+        return Redirect(
+            path=f"/login_failed",
+            status_code=303,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+    # great we have the steam id, now let's either provision a new key and display it to the user
+    # if it is not in the DB or say that it already exists, and if they forgot it to let an admin know...
+    # admin will then delete the steam ID of the user in the DB and a new sign in will work.
+    steam_id = os.path.split(data["openid.claimed_id"])[-1]
+    engine = app.state.engine
+    has_key = check_steam_id_has_api_key(engine, steam_id)
+
+    if has_key:
+
+
+    else:
+        text = f"You do not have an API key! <a href='/provision'>Provision one first.</a>"
+
+
 @get("/provision_handler", media_type=MediaType.HTML, sync_to_thread=True)
-def provision_handler(request: Request) -> str:
+def provision_handler(request: Request) -> str | Redirect:
     """Handle a response from Steam.
 
     Mostly stolen from https://github.com/TeddiO/pySteamSignIn/blob/master/pysteamsignin/steamsignin.py
@@ -243,47 +344,33 @@ def provision_handler(request: Request) -> str:
     Returns:
         Page of HTML for user.
     """
-    data = request.query_params
-    validation_args = {
-        "openid.assoc_handle": data["openid.assoc_handle"],
-        "openid.signed": data["openid.signed"],
-        "openid.sig": data["openid.sig"],
-        "openid.ns": data["openid.ns"],
-    }
+    data, decoded = process_openid_response(request)
 
-    signed_args = data["openid.signed"].split(",")
-    for item in signed_args:
-        arg = f"openid.{item}"
-        if data[arg] not in validation_args:
-            validation_args[arg] = data[arg]
-
-    validation_args["openid.mode"] = "check_authentication"
-    parsed_args = urlencode(validation_args).encode()
-
-    response = requests.get("https://steamcommunity.com/openid/login", params=parsed_args)
-    decoded = response.content.decode()
     _, valid_str, _ = decoded.split("\n")
     # valid_str looks like `is_valid:true`
     valid = bool(valid_str.split(":"))
 
     if not valid:
-        text = "Could not log you in!"
+        return Redirect(
+            path=f"/login_failed",
+            status_code=303,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+    # great we have the steam id, now let's either provision a new key and display it to the user
+    # if it is not in the DB or say that it already exists, and if they forgot it to let an admin know...
+    # admin will then delete the steam ID of the user in the DB and a new sign in will work.
+    steam_id = os.path.split(data["openid.claimed_id"])[-1]
+    engine = app.state.engine
+    has_key = check_steam_id_has_api_key(engine, steam_id)
+
+    if not has_key:
+        api_key = str(generate_uuid4_int())
+        provision_api_key(engine, steam_id, api_key)
+        text = f"Successfully authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"
 
     else:
-        # great we have the steam id, now lets either provision a new key and display it to the user
-        # if it is not in the DB or say that it already exists, and if they forgot it to let an admin know...
-        # admin will then delete the steam ID of the user in the DB and a new sign in will work.
-        steam_id = os.path.split(data["openid.claimed_id"])[-1]
-        engine = app.state.engine
-        has_key = check_steam_id_has_api_key(engine, steam_id)
-
-        if not has_key:
-            api_key = generate_uuid4_int()
-            provision_api_key(engine, steam_id, api_key)
-            text = f"Successfully authenticated! Your API key is {api_key}! Do not lose this as the client needs it!"
-
-        else:
-            text = f"Steam ID {steam_id} already exists! If you forgot your API key, please let an admin know."
+        text = f"Steam ID {steam_id} already exists! If you forgot your API key, please let an admin know."
 
     return f"""
         <html>
@@ -296,6 +383,8 @@ def provision_handler(request: Request) -> str:
         """
 
 
+
+
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
     route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler, late_bytes],
@@ -304,8 +393,8 @@ app = Litestar(
 
 
 def main() -> None:
-    config = uvicorn.Config("api.app:app", host="0.0.0.0", log_level="info", workers=6, ws_ping_interval=None)
-    server = uvicorn.Server(config)
+    config = Config("api.app:app", host="0.0.0.0", log_level="debug", workers=os.cpu_count(), ws_ping_interval=None)
+    server = Server(config)
     server.run()
 
 

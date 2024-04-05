@@ -15,6 +15,7 @@ dependencies = [
     "asyncpg>=0.29.0",
     "greenlet>=3.0.3",
     "uvicorn>=0.27.1",
+    "loguru>=0.7.2",
 ]
 requires-python = ">=3.10,<3.13"
 readme = "README.md"
