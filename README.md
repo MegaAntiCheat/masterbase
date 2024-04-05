@@ -21,6 +21,17 @@ pdm sync
 
 # `pdm sync -G:all` for development dependencies
 ```
+# Usage
+
+## Authenticating with the API:
+Visit https://megaanticheat.com/provision to provision an API key, and store the API key in your `config.yaml` file. See https://github.com/MegaAntiCheat/client-backend
+for instructions on where to locate it, but basically in a format of
+```yaml
+masterbase_key: 'your_api_key_here'
+```
+
+
+# Development
 
 
 ## Steam API
