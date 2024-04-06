@@ -8,7 +8,7 @@ from uuid import uuid4
 import pytest
 import toml
 
-from src.api.steam import STEAM_API_KEY_KEYNAME, Filters, get_steam_api_key
+from masterbase.steam import STEAM_API_KEY_KEYNAME, Filters, get_steam_api_key
 
 
 @pytest.fixture(scope="session")

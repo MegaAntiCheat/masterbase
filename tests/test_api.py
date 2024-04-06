@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from src.api.lib import DEMOS_PATH, generate_uuid4_int, make_db_uri, make_demo_path
+from masterbase.lib import DEMOS_PATH, generate_uuid4_int, make_db_uri, make_demo_path
 
 
 @pytest.fixture(scope="session")

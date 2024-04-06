@@ -17,7 +17,7 @@ from litestar.response import Redirect
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from src.api.lib import (
+from masterbase.lib import (
     check_is_active,
     check_key_exists,
     check_steam_id_has_api_key,
@@ -331,7 +331,7 @@ app = Litestar(
 
 def main() -> None:
     """Enter app and setup config."""
-    config = uvicorn.Config("api.app:app", host="0.0.0.0", log_level="info", workers=6, ws_ping_interval=None)
+    config = uvicorn.Config("app:app", host="0.0.0.0", log_level="info", workers=6, ws_ping_interval=None)
     server = uvicorn.Server(config)
     server.run()
 

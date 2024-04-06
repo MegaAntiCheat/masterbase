@@ -5,9 +5,8 @@ from sqlalchemy import pool
 
 from alembic import context
 
-import os
 
-from src.api.lib import make_db_uri
+from masterbase.lib import make_db_uri
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
