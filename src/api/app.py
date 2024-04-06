@@ -1,3 +1,4 @@
+import contextlib
 import logging
 import os
 from datetime import datetime, timezone
@@ -33,6 +34,10 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 logger = logging.getLogger(__name__)
+
+
+# use this to ensure client only has one open connection
+streaming_sessions: dict[WebSocket, IO] = {}
 
 
 def get_db_connection(app: Litestar) -> Engine:
@@ -150,7 +155,8 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
         # this should never happen but lets be safe
         if latest_session_id in streaming_sessions:
-            streaming_sessions.remove(latest_session_id)
+            with contextlib.suppress(KeyError):
+                streaming_sessions.pop(latest_session_id)
 
     else:
         logger.error(f"Found orphaned session and demo at {demo_path}")
@@ -172,9 +178,6 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
 
     return {"late_bytes": True}
 
-
-# use this to ensure client only has one open connection
-streaming_sessions: dict[WebSocket, IO] = {}
 
 def _session_id_from_handle(handle: IO) -> str:
     return os.path.splitext(os.path.basename(handle.name))[0]
