@@ -1,3 +1,5 @@
+"""Library code for hitting Steam API."""
+
 import json
 import os
 from typing import Any
@@ -97,7 +99,7 @@ class Filters:
         collapse_addr_hash: bool | None = None,
         gameaddr: str | None = None,
     ) -> None:
-        """Filters for the api.steampowered.com/IGameServersService/GetServerList/v1 endpoint.
+        """Filter for the api.steampowered.com/IGameServersService/GetServerList/v1 endpoint.
 
         Args:
             dedicated: False for non-dedicated, True for dedicated
@@ -192,22 +194,27 @@ class Filters:
             if isinstance(attr, list):
                 attr = ",".join(attr)
 
-            filters.append(f"\{filter_param}\{attr}")
+            filters.append(rf"\{filter_param}\{attr}")
 
         # handle defaults
         if not filters:
             return ""
 
-        return "".join(filters)
+        filter_str = ",".join(filters)
+        if filter_str:
+            return f"filter={filter_str}"
 
     @property
     def filter_string(self) -> dict[str, str]:
+        """Return the filter string."""
         return self._make_filter_str()
 
     def add_nor_filter(self) -> None:
+        """Add nor filter."""
         raise NotImplementedError
 
     def add_nand_filter(self) -> None:
+        """Add nand filter."""
         raise NotImplementedError
 
 
@@ -304,7 +311,7 @@ class Query:
         self.limit = limit
 
     def _query(self) -> dict[str, Any]:
-        """Helper method to apply filters and query."""
+        """Apply filters and query."""
         params = {}
 
         params["key"] = self.steam_api_key
@@ -321,7 +328,7 @@ class Query:
         return response.json()["response"]
 
     def query(self) -> list[Server]:
-        """Thin wrapper for _query() and converts to Pydantic classes."""
+        """Wrap query and convert to Pydantic classes."""
         response = self._query()
 
         if not response:
