@@ -181,6 +181,13 @@ class DemoHandler(WebsocketListener):
     path = "/demos"
     receive_mode = "binary"
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.api_key = None
+        self.session_id = None
+        self.path = None
+        self.handle = None
+
     async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:
         engine = socket.app.state.async_engine
         exists = await _check_key_exists(engine, api_key)
