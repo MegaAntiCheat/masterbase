@@ -20,6 +20,7 @@ from api.lib import (
     make_db_uri,
     make_demo_path,
     provision_api_key,
+    session_id_from_handle,
     start_session_helper,
     update_api_key,
 )
@@ -55,7 +56,7 @@ def close_db_connection(app: Litestar) -> None:
         cast("Engine", app.state.engine).dispose()
 
 
-def get_async_db_connection(app: Litestar) -> Engine:
+def get_async_db_connection(app: Litestar) -> AsyncEngine:
     """Get the async db engine.
 
     If it doesn't exist, creates it and saves it in on the application state object
@@ -159,10 +160,6 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     return {"late_bytes": True}
 
 
-def _session_id_from_handle(handle: IO) -> str:
-    return os.path.splitext(os.path.basename(handle.name))[0]
-
-
 class DemoHandler(WebsocketListener):
     """Custom Websocket Class."""
 
@@ -200,13 +197,13 @@ class DemoHandler(WebsocketListener):
 
     def on_disconnect(self, socket: WebSocket) -> None:
         """Close handle on disconnect."""
-        session_id = _session_id_from_handle(streaming_sessions[socket])
+        session_id = session_id_from_handle(streaming_sessions[socket])
         logger.info(f"Received disconnect from session ID: {session_id}")
         streaming_sessions[socket].close()
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
         """Write data on disconnect."""
-        session_id = _session_id_from_handle(streaming_sessions[socket])
+        session_id = session_id_from_handle(streaming_sessions[socket])
         logger.info(f"Sinking {len(data)} bytes to to {session_id}")
         streaming_sessions[socket].write(data)
 
@@ -292,7 +289,7 @@ def provision_handler(request: Request) -> str:
         # block limited accounts...
         limited = is_limited_account(steam_id)
         if limited:
-            return
+            return "limited"
 
         engine = app.state.engine
         is_beta_tester = check_steam_id_is_beta_tester(engine, steam_id)

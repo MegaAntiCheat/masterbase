@@ -1,6 +1,5 @@
 """Library code for application."""
 
-import contextlib
 import os
 from datetime import datetime, timezone
 from typing import IO
@@ -30,7 +29,7 @@ def make_db_uri(is_async: bool = False) -> str:
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
 
 
-def make_demo_path(session_id: str) -> os.path:
+def make_demo_path(session_id: str) -> str:
     """Make the demo path for the current session."""
     return os.path.join(DEMOS_PATH, f"{session_id}.dem")
 
@@ -52,6 +51,11 @@ def _get_latest_session_id(engine: Engine, api_key: str) -> str | None:
 def generate_uuid4_int() -> int:
     """Seems useless, but makes testing easier."""
     return uuid4().int
+
+
+def session_id_from_handle(handle: IO) -> str:
+    """Get the session ID from a handle."""
+    return os.path.splitext(os.path.basename(handle.name))[0]
 
 
 async def check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
@@ -164,7 +168,7 @@ def _close_session_with_demo(
 ) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
-        oid = conn.connection.lobject(mode="w", new_file=demo_path).oid
+        oid = conn.connection.lobject(mode="w", new_file=demo_path).oid  # type: ignore
         conn.execute(
             sa.text(
                 """UPDATE demo_sessions
@@ -200,6 +204,9 @@ def close_session_helper(engine: Engine, api_key: str, streaming_sessions: dict[
         status message on what happened
     """
     latest_session_id = _get_latest_session_id(engine, api_key)
+    if latest_session_id is None:
+        return "User has never been in a session!"
+
     demo_path = make_demo_path(latest_session_id)
     demo_path_exists = os.path.exists(demo_path)
 
@@ -220,8 +227,9 @@ def close_session_helper(engine: Engine, api_key: str, streaming_sessions: dict[
         msg = f"Found orphaned session and demo at {demo_path} and removed."
 
     # remove session from active sessions
-    with contextlib.suppress(KeyError):
-        streaming_sessions.pop(latest_session_id)
+    for session, handle in streaming_sessions.items():
+        if session_id_from_handle(handle) == latest_session_id:
+            streaming_sessions.pop(session)
 
     return msg
 
@@ -260,7 +268,7 @@ def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
         return result
 
 
-def update_api_key(engine: Engine, steam_id: str, new_api_key) -> str | None:
+def update_api_key(engine: Engine, steam_id: str, new_api_key) -> None:
     """Update an API key."""
     with engine.connect() as conn:
         conn.execute(
@@ -303,5 +311,7 @@ def is_limited_account(steam_id: str) -> bool:
     tree = ElementTree.fromstring(response.content)
     for element in tree:
         if element.tag == "isLimitedAccount":
-            limited = bool(int(element.text))
+            limited = bool(int(str(element.text)))
             return limited
+
+    raise ValueError(f"Could not determine if {steam_id} is limited!")

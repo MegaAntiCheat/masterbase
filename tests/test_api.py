@@ -8,7 +8,7 @@ from src.api.lib import DEMOS_PATH, generate_uuid4_int, make_db_uri, make_demo_p
 
 
 @pytest.fixture(scope="session")
-def session_id() -> str:
+def session_id() -> int:
     """Session ID fixture."""
     return generate_uuid4_int()
 

@@ -144,8 +144,8 @@ class Filters:
         self.collapse_addr_hash = Filters.coerce_boolean(collapse_addr_hash)
         self.gameaddr = gameaddr
 
-        self.nor_filter = []
-        self.nand_filter = []
+        self.nor_filter: list[str] = []
+        self.nand_filter: list[str] = []
 
     @staticmethod
     def coerce_boolean(value: bool | None) -> int | None:
@@ -204,8 +204,10 @@ class Filters:
         if filter_str:
             return f"filter={filter_str}"
 
+        return ""
+
     @property
-    def filter_string(self) -> dict[str, str]:
+    def filter_string(self) -> str:
         """Return the filter string."""
         return self._make_filter_str()
 
@@ -278,7 +280,7 @@ class Server(BaseModel):
         """
         server_data = {}
 
-        params = {
+        params: dict[str, str | int] = {
             "key": steam_api_key,
             "fake_ip": self.fake_ip,
             "fake_port": self.gameport,
@@ -312,7 +314,7 @@ class Query:
 
     def _query(self) -> dict[str, Any]:
         """Apply filters and query."""
-        params = {}
+        params: dict[str, str | int] = {}
 
         params["key"] = self.steam_api_key
 

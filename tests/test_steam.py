@@ -17,7 +17,7 @@ def steam_id() -> str:
     return str(uuid4().int)
 
 
-def write_json_steam_id(steam_id: str, tmpdir: os.PathLike) -> None:
+def write_json_steam_id(steam_id: str, tmpdir: os.PathLike) -> str:
     """Write a json JSON Steam ID."""
     data = {STEAM_API_KEY_KEYNAME: steam_id}
     path = os.path.join(tmpdir, "id.json")
@@ -27,7 +27,7 @@ def write_json_steam_id(steam_id: str, tmpdir: os.PathLike) -> None:
     return path
 
 
-def write_toml_steam_id(steam_id: str, tmpdir: os.PathLike) -> None:
+def write_toml_steam_id(steam_id: str, tmpdir: os.PathLike) -> str:
     """Write a json TOML Steam ID."""
     data = {STEAM_API_KEY_KEYNAME: steam_id}
     path = os.path.join(tmpdir, "id.toml")
@@ -37,7 +37,7 @@ def write_toml_steam_id(steam_id: str, tmpdir: os.PathLike) -> None:
     return path
 
 
-def write_environment_steam_id(steam_id: str) -> None:
+def write_environment_steam_id(steam_id: str) -> str:
     """Write an Environment Variable Steam ID."""
     os.environ[STEAM_API_KEY_KEYNAME] = steam_id
 
