@@ -8,7 +8,16 @@ from urllib.parse import urlencode
 
 import requests
 import uvicorn
-from api.lib import (
+from litestar import Litestar, MediaType, Request, WebSocket, get, post
+from litestar.connection import ASGIConnection
+from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
+from litestar.handlers import WebsocketListener
+from litestar.handlers.base import BaseRouteHandler
+from litestar.response import Redirect
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+
+from src.api.lib import (
     check_is_active,
     check_key_exists,
     check_steam_id_has_api_key,
@@ -24,14 +33,6 @@ from api.lib import (
     start_session_helper,
     update_api_key,
 )
-from litestar import Litestar, MediaType, Request, WebSocket, get, post
-from litestar.connection import ASGIConnection
-from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
-from litestar.handlers import WebsocketListener
-from litestar.handlers.base import BaseRouteHandler
-from litestar.response import Redirect
-from sqlalchemy import Engine, create_engine
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ def session_id(
     Returns:
         {"session_id": some integer}
     """
-    _session_id = generate_uuid4_int()
+    _session_id = str(generate_uuid4_int())
     engine = request.app.state.engine
     start_session_helper(engine, api_key, _session_id, demo_name, fake_ip, map)
 
@@ -166,7 +167,7 @@ class DemoHandler(WebsocketListener):
     path = "/demos"
     receive_mode = "binary"
 
-    async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:
+    async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:  # type: ignore
         """Accept a user and create handle."""
         engine = socket.app.state.async_engine
         exists = await check_key_exists(engine, api_key)
@@ -195,7 +196,7 @@ class DemoHandler(WebsocketListener):
 
         streaming_sessions[socket] = open(path, mode)
 
-    def on_disconnect(self, socket: WebSocket) -> None:
+    def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
         """Close handle on disconnect."""
         session_id = session_id_from_handle(streaming_sessions[socket])
         logger.info(f"Received disconnect from session ID: {session_id}")
@@ -298,7 +299,7 @@ def provision_handler(request: Request) -> str:
             return "<span>You aren't a beta tester! Sorry!</span>"
 
         api_key = check_steam_id_has_api_key(engine, steam_id)
-        new_api_key = generate_uuid4_int()
+        new_api_key = str(generate_uuid4_int())
         invalidated_text = ""
         if api_key is not None:
             # invalidate old API key and provision a new one

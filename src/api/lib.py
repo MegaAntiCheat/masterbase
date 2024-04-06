@@ -268,7 +268,7 @@ def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
         return result
 
 
-def update_api_key(engine: Engine, steam_id: str, new_api_key) -> None:
+def update_api_key(engine: Engine, steam_id: str, new_api_key: str) -> None:
     """Update an API key."""
     with engine.connect() as conn:
         conn.execute(
