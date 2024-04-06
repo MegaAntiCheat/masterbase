@@ -1,3 +1,5 @@
+"""Test steam api code."""
+
 import json
 import os
 from typing import Any
@@ -5,8 +7,8 @@ from uuid import uuid4
 
 import pytest
 import toml
-from api.auth import STEAM_API_KEY_KEYNAME, get_steam_api_key
-from api.servers import Filters
+
+from src.api.steam import STEAM_API_KEY_KEYNAME, Filters, get_steam_api_key
 
 
 @pytest.fixture(scope="session")
@@ -16,7 +18,7 @@ def steam_id() -> str:
 
 
 def write_json_steam_id(steam_id: str, tmpdir: os.PathLike) -> None:
-    """Helper util to write a json JSON Steam ID."""
+    """Write a json JSON Steam ID."""
     data = {STEAM_API_KEY_KEYNAME: steam_id}
     path = os.path.join(tmpdir, "id.json")
     with open(path, "w") as f:
@@ -26,7 +28,7 @@ def write_json_steam_id(steam_id: str, tmpdir: os.PathLike) -> None:
 
 
 def write_toml_steam_id(steam_id: str, tmpdir: os.PathLike) -> None:
-    """Helper util to write a json TOML Steam ID."""
+    """Write a json TOML Steam ID."""
     data = {STEAM_API_KEY_KEYNAME: steam_id}
     path = os.path.join(tmpdir, "id.toml")
     with open(path, "w") as f:
@@ -36,7 +38,7 @@ def write_toml_steam_id(steam_id: str, tmpdir: os.PathLike) -> None:
 
 
 def write_environment_steam_id(steam_id: str) -> None:
-    """Helper util to write an Environment Variable Steam ID."""
+    """Write an Environment Variable Steam ID."""
     os.environ[STEAM_API_KEY_KEYNAME] = steam_id
 
     return STEAM_API_KEY_KEYNAME
@@ -92,6 +94,7 @@ def test_coerce_listable(value: list[str] | str | None, expected: list[str] | No
     ],
 )
 def test_filters(kwargs: dict[str, Any], expected: str) -> None:
+    """Test filters are applied correctly."""
     filters = Filters(**kwargs)
 
     actual = filters._make_filter_str()

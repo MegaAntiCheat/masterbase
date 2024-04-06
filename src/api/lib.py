@@ -1,3 +1,6 @@
+"""Library code for application."""
+
+import contextlib
 import os
 from datetime import datetime, timezone
 from uuid import uuid4
@@ -5,14 +8,16 @@ from xml.etree import ElementTree
 
 import requests
 import sqlalchemy as sa
+from litestar import WebSocket
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
+from typoing import IO
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
 
 
-def _make_db_uri(async_url: bool = False) -> str:
+def make_db_uri(async_url: bool = False) -> str:
     """Correctly make the database URi."""
     user = os.environ["POSTGRES_USER"]
     password = os.environ["POSTGRES_PASSWORD"]
@@ -25,7 +30,7 @@ def _make_db_uri(async_url: bool = False) -> str:
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
 
 
-def _make_demo_path(session_id: str) -> os.path:
+def make_demo_path(session_id: str) -> os.path:
     """Make the demo path for the current session."""
     return os.path.join(DEMOS_PATH, f"{session_id}.dem")
 
@@ -49,8 +54,8 @@ def generate_uuid4_int() -> int:
     return uuid4().int
 
 
-async def _check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
-    """Helper util to determine key existence."""
+async def check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
+    """Determine key existence."""
     async with engine.connect() as conn:
         result = await conn.execute(sa.text("SELECT * FROM api_keys WHERE api_key = :api_key"), {"api_key": api_key})
         data = result.all()
@@ -60,8 +65,8 @@ async def _check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
         return True
 
 
-async def _check_is_active(engine: AsyncEngine, api_key: str) -> bool:
-    """Helper util to determine if a session is active."""
+async def check_is_active(engine: AsyncEngine, api_key: str) -> bool:
+    """Determine if a session is active."""
     sql = "SELECT * FROM demo_sessions WHERE api_key = :api_key and active = true;"
     params = {"api_key": api_key}
 
@@ -77,7 +82,9 @@ async def _check_is_active(engine: AsyncEngine, api_key: str) -> bool:
         return is_active
 
 
-def _start_session(engine: Engine, api_key: str, session_id: str, demo_name: str, fake_ip: str, map_str: str) -> None:
+def start_session_helper(
+    engine: Engine, api_key: str, session_id: str, demo_name: str, fake_ip: str, map_str: str
+) -> None:
     """Start a session and persist to DB."""
     with engine.connect() as conn:
         conn.execute(
@@ -129,7 +136,7 @@ def _start_session(engine: Engine, api_key: str, session_id: str, demo_name: str
         conn.commit()
 
 
-def _close_session(engine: Engine, api_key: str, current_time: datetime) -> None:
+def _close_session_without_demo(engine: Engine, api_key: str, current_time: datetime) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
         conn.execute(
@@ -181,7 +188,45 @@ def _close_session_with_demo(
         conn.commit()
 
 
-def _late_bytes(engine: Engine, api_key: str, late_bytes: bytes, current_time: datetime) -> None:
+def close_session_helper(engine: Engine, api_key: str, streaming_sessions: dict[WebSocket, IO]) -> str:
+    """Properly close a session and return a summary message.
+
+    Args:
+        engine: Engine for the DB
+        api_key: api key of the user
+        streaming_sessions: dict of active sessions being streamed to
+
+    Returns:
+        status message on what happened
+    """
+    latest_session_id = _get_latest_session_id(engine, api_key)
+    demo_path = make_demo_path(latest_session_id)
+    demo_path_exists = os.path.exists(demo_path)
+
+    current_time = datetime.now().astimezone(timezone.utc)
+
+    if latest_session_id is None or not demo_path_exists:
+        _close_session_without_demo(engine, api_key, current_time)
+        msg = "No active session found, closing anyway."
+
+    elif latest_session_id is not None and demo_path_exists:
+        _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
+        os.remove(demo_path)
+        msg = "Active session was closed, demo inserted."
+
+    # we found no session but did find a demo
+    else:
+        os.remove(demo_path)
+        msg = f"Found orphaned session and demo at {demo_path} and removed."
+
+    # remove session from active sessions
+    with contextlib.suppress(KeyError):
+        streaming_sessions.pop(latest_session_id)
+
+    return msg
+
+
+def late_bytes_helper(engine: Engine, api_key: str, late_bytes: bytes, current_time: datetime) -> None:
     """Add late bytes to the DB."""
     with engine.connect() as conn:
         conn.execute(

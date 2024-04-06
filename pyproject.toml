@@ -45,15 +45,13 @@ explicit_package_bases = true
 
 # See https://github.com/astral-sh/ruff#configuration
 [tool.ruff.lint]
-select = ["F", "E", "I001"]
+select = ["F", "E", "I001", "W", "N", "D"]
 ignore = ["D413"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "pep257"
 
 [tool.ruff]
+include = ["pyproject.toml", "src/**/*.py", "tests/**/*.py"]
 line-length = 120
 target-version = "py311"  # defaults to 3.8, but this repo targets 3.9%
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"

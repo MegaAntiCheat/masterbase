@@ -1,4 +1,5 @@
-import contextlib
+"""Litestar Application for serving and ingesting data."""
+
 import logging
 import os
 from datetime import datetime, timezone
@@ -8,20 +9,18 @@ from urllib.parse import urlencode
 import requests
 import uvicorn
 from api.lib import (
-    _check_is_active,
-    _check_key_exists,
-    _close_session,
-    _close_session_with_demo,
-    _get_latest_session_id,
-    _late_bytes,
-    _make_db_uri,
-    _make_demo_path,
-    _start_session,
+    check_is_active,
+    check_key_exists,
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
+    close_session_helper,
     generate_uuid4_int,
     is_limited_account,
+    late_bytes_helper,
+    make_db_uri,
+    make_demo_path,
     provision_api_key,
+    start_session_helper,
     update_api_key,
 )
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
@@ -41,43 +40,43 @@ streaming_sessions: dict[WebSocket, IO] = {}
 
 
 def get_db_connection(app: Litestar) -> Engine:
-    """Returns the db engine.
+    """Get the db engine.
 
     If it doesn't exist, creates it and saves it in on the application state object
     """
     if not getattr(app.state, "engine", None):
-        app.state.engine = create_engine(_make_db_uri(), pool_pre_ping=True)
+        app.state.engine = create_engine(make_db_uri(), pool_pre_ping=True)
     return cast("Engine", app.state.engine)
 
 
 def close_db_connection(app: Litestar) -> None:
-    """Closes the db connection stored in the application State object."""
+    """Close the db connection stored in the application State object."""
     if getattr(app.state, "engine", None):
         cast("Engine", app.state.engine).dispose()
 
 
 def get_async_db_connection(app: Litestar) -> Engine:
-    """Returns the async db engine.
+    """Get the async db engine.
 
     If it doesn't exist, creates it and saves it in on the application state object
     """
     if not getattr(app.state, "async_engine", None):
-        app.state.async_engine = create_async_engine(_make_db_uri(async_url=True), pool_pre_ping=True)
+        app.state.async_engine = create_async_engine(make_db_uri(async_url=True), pool_pre_ping=True)
     return cast("AsyncEngine", app.state.async_engine)
 
 
 async def close_async_db_connection(app: Litestar) -> None:
-    """Closes the db connection stored in the application State object."""
+    """Close the db connection stored in the application State object."""
     if getattr(app.state, "async_engine", None):
         await cast("AsyncEngine", app.state.async_engine).dispose()
 
 
 async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
-    """A Guard clause to validate the user's API key."""
+    """Guard clause to validate the user's API key."""
     api_key = connection.query_params["api_key"]
 
     async_engine = connection.app.state.async_engine
-    exists = await _check_key_exists(async_engine, api_key)
+    exists = await check_key_exists(async_engine, api_key)
     if not exists:
         raise NotAuthorizedException()
 
@@ -87,7 +86,7 @@ async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler)
     async_engine = connection.app.state.async_engine
 
     api_key = connection.query_params["api_key"]
-    is_active = await _check_is_active(async_engine, api_key)
+    is_active = await check_is_active(async_engine, api_key)
 
     if is_active:
         raise PermissionDeniedException(
@@ -100,7 +99,7 @@ async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHand
     async_engine = connection.app.state.async_engine
 
     api_key = connection.query_params["api_key"]
-    is_active = await _check_is_active(async_engine, api_key)
+    is_active = await check_is_active(async_engine, api_key)
     if not is_active:
         raise PermissionDeniedException(detail="User is not in a session, create one at `/session_id`!")
 
@@ -123,43 +122,24 @@ def session_id(
     Returns:
         {"session_id": some integer}
     """
-
     _session_id = generate_uuid4_int()
     engine = request.app.state.engine
-    _start_session(engine, api_key, _session_id, demo_name, fake_ip, map)
+    start_session_helper(engine, api_key, _session_id, demo_name, fake_ip, map)
 
     return {"session_id": _session_id}
 
 
 @get("/close_session", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
 def close_session(request: Request, api_key: str) -> dict[str, bool]:
-    """Close a session out.
+    """Close a session out. Will find the latest open session for a user.
 
     Returns:
         {"closed_successfully": True}
     """
     engine = request.app.state.engine
 
-    latest_session_id = _get_latest_session_id(engine, api_key)
-    demo_path = _make_demo_path(latest_session_id)
-    demo_path_exists = os.path.exists(demo_path)
-
-    current_time = datetime.now().astimezone(timezone.utc)
-
-    if latest_session_id is None or not demo_path_exists:
-        _close_session(engine, api_key, current_time)
-
-    elif latest_session_id is not None and demo_path_exists:
-        _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
-        os.remove(demo_path)
-
-        # this should never happen but lets be safe
-        if latest_session_id in streaming_sessions:
-            with contextlib.suppress(KeyError):
-                streaming_sessions.pop(latest_session_id)
-
-    else:
-        logger.error(f"Found orphaned session and demo at {demo_path}")
+    msg = close_session_helper(engine, api_key, streaming_sessions)
+    logger.info(msg)
 
     return {"closed_successfully": True}
 
@@ -174,7 +154,7 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
     late_bytes = bytes.fromhex(data["late_bytes"])
-    _late_bytes(engine, api_key, late_bytes, current_time)
+    late_bytes_helper(engine, api_key, late_bytes, current_time)
 
     return {"late_bytes": True}
 
@@ -184,17 +164,20 @@ def _session_id_from_handle(handle: IO) -> str:
 
 
 class DemoHandler(WebsocketListener):
+    """Custom Websocket Class."""
+
     path = "/demos"
     receive_mode = "binary"
 
     async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:
+        """Accept a user and create handle."""
         engine = socket.app.state.async_engine
-        exists = await _check_key_exists(engine, api_key)
+        exists = await check_key_exists(engine, api_key)
         if not exists:
             logger.info("Invalid API key, closing!")
             await socket.close()
 
-        active = await _check_is_active(engine, api_key)
+        active = await check_is_active(engine, api_key)
         if not active:
             logger.info("User is not in a session, closing!")
             await socket.close()
@@ -203,7 +186,7 @@ class DemoHandler(WebsocketListener):
             logger.info("User is already streaming!")
             await socket.close()
 
-        path = _make_demo_path(session_id)
+        path = make_demo_path(session_id)
 
         demo_path_exists = os.path.exists(path)
         if demo_path_exists:
@@ -216,11 +199,13 @@ class DemoHandler(WebsocketListener):
         streaming_sessions[socket] = open(path, mode)
 
     def on_disconnect(self, socket: WebSocket) -> None:
+        """Close handle on disconnect."""
         session_id = _session_id_from_handle(streaming_sessions[socket].name)
         logger.info(f"Received disconnect from session ID: {session_id}")
         streaming_sessions[socket].close()
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
+        """Write data on disconnect."""
         session_id = _session_id_from_handle(streaming_sessions[socket].name)
         logger.info(f"Sinking {len(data)} bytes to to {session_id}")
         streaming_sessions[socket].write(data)
@@ -238,9 +223,7 @@ def provision(request: Request) -> Redirect:
     Returns:
         Redirect to the steam sign in
     """
-
     # enforce https on base_url
-
     base_url = str(request.base_url)
     if not base_url.startswith("https") and not os.environ["DEVELOPMENT"]:
         base_url = base_url.replace("http", "https")
@@ -349,6 +332,7 @@ app = Litestar(
 
 
 def main() -> None:
+    """Enter app and setup config."""
     config = uvicorn.Config("api.app:app", host="0.0.0.0", log_level="info", workers=6, ws_ping_interval=None)
     server = uvicorn.Server(config)
     server.run()
