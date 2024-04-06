@@ -29,7 +29,7 @@ target_metadata = None
 # my_important_option = config.get_main_option("my_important_option")
 # ... etc.
 
-config.set_main_option("sqlalchemy.url", _make_db_uri())
+config.set_main_option("sqlalchemy.url", make_db_uri())
 
 
 def run_migrations_offline() -> None:
