@@ -1,8 +1,16 @@
 """Test api utilities."""
 
+import os
+
 import pytest
 
-from src.api.lib import make_db_uri
+from src.api.lib import DEMOS_PATH, generate_uuid4_int, make_db_uri, make_demo_path
+
+
+@pytest.fixture(scope="session")
+def session_id() -> str:
+    """Session ID fixture."""
+    return generate_uuid4_int()
 
 
 @pytest.fixture
@@ -25,3 +33,9 @@ def test_make_db_uri(mock_os_environ, is_async: bool, expected_uri: str) -> None
     """Test `make_db_uri`."""
     actual = make_db_uri(is_async)
     assert actual == expected_uri
+
+
+def test_make_demo_path(session_id: str) -> None:
+    """Test make demo path."""
+    actual = make_demo_path(session_id)
+    assert actual == os.path.join(DEMOS_PATH, f"{session_id}.dem")
