@@ -3,6 +3,7 @@
 import contextlib
 import os
 from datetime import datetime, timezone
+from typing import IO
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -11,20 +12,19 @@ import sqlalchemy as sa
 from litestar import WebSocket
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
-from typoing import IO
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
 
 
-def make_db_uri(async_url: bool = False) -> str:
+def make_db_uri(is_async: bool = False) -> str:
     """Correctly make the database URi."""
     user = os.environ["POSTGRES_USER"]
     password = os.environ["POSTGRES_PASSWORD"]
     host = os.environ.get("POSTGRES_HOST", "localhost")
     port = os.environ.get("POSTGRES_PORT", "8050")
     prefix = "postgresql"
-    if async_url:
+    if is_async:
         prefix = f"{prefix}+asyncpg"
 
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
