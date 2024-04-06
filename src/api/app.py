@@ -206,7 +206,7 @@ class DemoHandler(WebsocketListener):
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
         """Write data on disconnect."""
-        session_id = _session_id_from_handle(streaming_sessions[socket].name)
+        session_id = _session_id_from_handle(streaming_sessions[socket])
         logger.info(f"Sinking {len(data)} bytes to to {session_id}")
         streaming_sessions[socket].write(data)
 
