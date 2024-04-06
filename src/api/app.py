@@ -333,7 +333,9 @@ app = Litestar(
 
 def main() -> None:
     """Enter app and setup config."""
-    config = uvicorn.Config("api.app:app", host="0.0.0.0", log_level="info", workers=6, ws_ping_interval=None)
+    config = uvicorn.Config(
+        "api.app:app", host="0.0.0.0", log_level="info", workers=6, ws_ping_interval=None, timeout_keep_alive=20
+    )
     server = uvicorn.Server(config)
     server.run()
 
