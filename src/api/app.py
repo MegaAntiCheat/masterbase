@@ -176,6 +176,9 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
 # use this to ensure client only has one open connection
 streaming_sessions: dict[WebSocket, IO] = {}
 
+def _session_id_from_handle(handle: IO) -> str:
+    return os.path.splitext(os.path.basename(handle.name))[0]
+
 
 class DemoHandler(WebsocketListener):
     path = "/demos"
@@ -210,12 +213,14 @@ class DemoHandler(WebsocketListener):
         streaming_sessions[socket] = open(path, mode)
 
     def on_disconnect(self, socket: WebSocket) -> None:
-        logger.info(f"Received disconnect from session ID: {streaming_sessions[socket].name}")
+        session_id = _session_id_from_handle(streaming_sessions[socket].name)
+        logger.info(f"Received disconnect from session ID: {session_id}")
         streaming_sessions[socket].close()
         streaming_sessions.pop(socket)
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
-        logger.info(f"Sinking {len(data)} bytes to to {streaming_sessions[socket].name}")
+        session_id = _session_id_from_handle(streaming_sessions[socket].name)
+        logger.info(f"Sinking {len(data)} bytes to to {session_id}")
         streaming_sessions[socket].write(data)
 
 
