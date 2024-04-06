@@ -1,7 +1,8 @@
+import contextlib
 import logging
 import os
 from datetime import datetime, timezone
-from typing import cast
+from typing import IO, cast
 from urllib.parse import urlencode
 
 import requests
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 # use this to ensure client only has one open connection
-streaming_sessions = set()
+streaming_sessions: dict[WebSocket, IO] = {}
 
 
 def get_db_connection(app: Litestar) -> Engine:
@@ -154,7 +155,8 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
         # this should never happen but lets be safe
         if latest_session_id in streaming_sessions:
-            streaming_sessions.remove(latest_session_id)
+            with contextlib.suppress(KeyError):
+                streaming_sessions.pop(latest_session_id)
 
     else:
         logger.error(f"Found orphaned session and demo at {demo_path}")
@@ -177,6 +179,10 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     return {"late_bytes": True}
 
 
+def _session_id_from_handle(handle: IO) -> str:
+    return os.path.splitext(os.path.basename(handle.name))[0]
+
+
 class DemoHandler(WebsocketListener):
     path = "/demos"
     receive_mode = "binary"
@@ -197,26 +203,27 @@ class DemoHandler(WebsocketListener):
             logger.info("User is already streaming!")
             await socket.close()
 
-        self.api_key = api_key
-        self.session_id = session_id
-        self.path = _make_demo_path(self.session_id)
+        path = _make_demo_path(session_id)
 
-        demo_path_exists = os.path.exists(self.path)
+        demo_path_exists = os.path.exists(path)
         if demo_path_exists:
             mode = "ab"
+            logger.info(f"Found existing handle for session ID: {session_id}")
         else:
+            logger.info(f"Creating new handle for session ID: {session_id}")
             mode = "wb"
 
-        streaming_sessions.add(self.session_id)
-        self.handle = open(self.path, mode)
+        streaming_sessions[socket] = open(path, mode)
 
     def on_disconnect(self, socket: WebSocket) -> None:
-        logger.info("Received disconnect!")
-        self.handle.close()
-        streaming_sessions.remove(self.session_id)
+        session_id = _session_id_from_handle(streaming_sessions[socket].name)
+        logger.info(f"Received disconnect from session ID: {session_id}")
+        streaming_sessions[socket].close()
 
-    def on_receive(self, data: bytes) -> None:
-        self.handle.write(data)
+    def on_receive(self, data: bytes, socket: WebSocket) -> None:
+        session_id = _session_id_from_handle(streaming_sessions[socket].name)
+        logger.info(f"Sinking {len(data)} bytes to to {session_id}")
+        streaming_sessions[socket].write(data)
 
 
 @get("/provision", sync_to_thread=False)
