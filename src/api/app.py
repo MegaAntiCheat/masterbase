@@ -204,18 +204,21 @@ class DemoHandler(WebsocketListener):
         demo_path_exists = os.path.exists(self.path)
         if demo_path_exists:
             mode = "ab"
+            logger.info(f"Found existing handle for session ID: {self.session_id}")
         else:
+            logger.info(f"Creating new handle for session ID: {self.session_id}")
             mode = "wb"
 
         streaming_sessions.add(self.session_id)
         self.handle = open(self.path, mode)
 
     def on_disconnect(self, socket: WebSocket) -> None:
-        logger.info("Received disconnect!")
+        logger.info(f"Received disconnect from session ID: {self.session}")
         self.handle.close()
         streaming_sessions.remove(self.session_id)
 
     def on_receive(self, data: bytes) -> None:
+        logger.info(f"Sinking {len(data)} bytes to to {self.path}")
         self.handle.write(data)
 
 
