@@ -219,7 +219,6 @@ class DemoHandler(WebsocketListener):
         session_id = _session_id_from_handle(streaming_sessions[socket].name)
         logger.info(f"Received disconnect from session ID: {session_id}")
         streaming_sessions[socket].close()
-        streaming_sessions.pop(socket)
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
         session_id = _session_id_from_handle(streaming_sessions[socket].name)
