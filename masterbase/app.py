@@ -177,9 +177,9 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
 def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
     engine = request.app.state.engine
-    bytestream = demodata_helper(engine, api_key, session_id)
+    bytestream_generator = demodata_helper(engine, api_key, session_id)
     headers = {"Content-Disposition": f'attachment; filename="{session_id}.dem"'}
-    return Stream(bytestream, media_type=MediaType.TEXT, headers=headers)
+    return Stream(bytestream_generator, media_type=MediaType.TEXT, headers=headers)
 
 
 class DemoHandler(WebsocketListener):
