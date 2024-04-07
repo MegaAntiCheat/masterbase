@@ -227,9 +227,14 @@ def close_session_helper(engine: Engine, api_key: str, streaming_sessions: dict[
         msg = f"Found orphaned session and demo at {demo_path} and removed."
 
     # remove session from active sessions
+    to_pop = None
     for session, handle in streaming_sessions.items():
-        if session_id_from_handle(handle) == latest_session_id:
-            streaming_sessions.pop(session)
+        handle_id = session_id_from_handle(handle)
+        if handle_id == latest_session_id:
+            to_pop = session
+
+    if to_pop is not None:
+        streaming_sessions.pop(to_pop)
 
     return msg
 
