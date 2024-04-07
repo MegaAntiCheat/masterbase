@@ -13,7 +13,7 @@ from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.handlers.base import BaseRouteHandler
-from litestar.response import Redirect
+from litestar.response import Redirect, Stream
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -163,11 +163,12 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
 
 
 @get("/demodata", guards=[valid_key_guard], sync_to_thread=False)
-def demodata(request: Request, api_key: str, session_id: str) -> bytes:
+def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
     engine = request.app.state.engine
-    data = demodata_helper(engine, api_key, session_id)
-    return data
+    bytestream = demodata_helper(engine, api_key, session_id)
+    headers = {"Content-Disposition": f'attachment; filename="{session_id}.dem"'}
+    return Stream(bytestream, media_type=MediaType.TEXT, headers=headers)
 
 
 class DemoHandler(WebsocketListener):
@@ -333,7 +334,7 @@ def provision_handler(request: Request) -> str:
 
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
-    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler, late_bytes],
+    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler, late_bytes, demodata],
     on_shutdown=[close_db_connection, close_async_db_connection],
 )
 
