@@ -113,7 +113,7 @@ def session_id(
     demo_name: str,
     fake_ip: str,
     map: str,
-) -> dict[str, str]:
+) -> dict[str, int]:
     """Return a session ID, as well as persist to database.
 
     This is to help us know what is happening downstream:
@@ -124,9 +124,9 @@ def session_id(
     Returns:
         {"session_id": some integer}
     """
-    _session_id = str(generate_uuid4_int())
+    _session_id = generate_uuid4_int()
     engine = request.app.state.engine
-    start_session_helper(engine, api_key, _session_id, demo_name, fake_ip, map)
+    start_session_helper(engine, api_key, str(_session_id), demo_name, fake_ip, map)
 
     return {"session_id": _session_id}
 
