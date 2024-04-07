@@ -70,7 +70,7 @@ async def check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
 
 
 async def check_is_active(engine: AsyncEngine, api_key: str) -> bool:
-    """Determine if a session is active."""
+    """Determine if a user is in an active session."""
     sql = "SELECT * FROM demo_sessions WHERE api_key = :api_key and active = true;"
     params = {"api_key": api_key}
 
@@ -84,6 +84,23 @@ async def check_is_active(engine: AsyncEngine, api_key: str) -> bool:
         is_active = bool(data)
 
         return is_active
+
+
+async def session_closed(engine: AsyncEngine, session_id: str) -> bool:
+    """Determine if a session is active."""
+    sql = "SELECT active FROM demo_sessions WHERE session_id = :session_id;"
+    params = {"session_id": session_id}
+
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            sa.text(sql),
+            params,
+        )
+
+        data = result.scalar_one_or_none()
+        closed = not data
+
+        return closed
 
 
 def start_session_helper(

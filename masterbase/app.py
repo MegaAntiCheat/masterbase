@@ -30,6 +30,7 @@ from masterbase.lib import (
     make_db_uri,
     make_demo_path,
     provision_api_key,
+    session_closed,
     session_id_from_handle,
     start_session_helper,
     update_api_key,
@@ -107,6 +108,16 @@ async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHand
         raise PermissionDeniedException(detail="User is not in a session, create one at `/session_id`!")
 
 
+async def session_closed_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+    """Assert that the session is closed."""
+    async_engine = connection.app.state.async_engine
+
+    session_id = connection.query_params["session_id"]
+    closed = await session_closed(async_engine, session_id)
+    if not closed:
+        raise PermissionDeniedException(detail="Session is still active, cannot retrieve data!")
+
+
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
 def session_id(
     request: Request,
@@ -162,7 +173,7 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     return {"late_bytes": True}
 
 
-@get("/demodata", guards=[valid_key_guard], sync_to_thread=False)
+@get("/demodata", guards=[valid_key_guard, session_closed_guard], sync_to_thread=False)
 def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
     engine = request.app.state.engine
