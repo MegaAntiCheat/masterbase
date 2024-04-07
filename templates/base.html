@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="{{ url_for_static_asset('static', 'css/open-color.min.css') }}">
+        <link rel="stylesheet" href="{{ url_for_static_asset('static', 'css/bootstrap.min.css') }}">
+        <link rel="stylesheet" href="{{ url_for_static_asset('static', 'css/style.css') }}">
+<!--        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/4.1.3/css/bootstrap.min.css">-->
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ionicons/2.0.1/css/ionicons.min.css">
+        <title>{% block title %}{% endblock %}</title>
+        {% include "header.html" %}
+    </head>
+    <body>
+        {% include "toggler.html" %}
+        <div class="container">
+            <div class="row justify-content-center">
+                  <div class="col col-sm-10 col-md-12 col-lg-14 body" id="content">
+                    {% block content %}{% endblock %}
+                  </div>
+            </div>
+        </div>
+<!--        <div id="content" class="body">-->
+<!--        </div>-->
+        {% include "footer.html" %}
+
+        <script src="{{ url_for_static_asset('static', 'js/bootstrap.min.js') }}"></script>
+        <script src="{{ url_for_static_asset('static', 'js/darkmode.js') }}"></script>
+        <script src="{{ url_for_static_asset('static', 'js/particles.min.js') }}"></script>
+        <script src="{{ url_for_static_asset('static', 'js/main.js') }}"></script>
+    </body>
+</html>

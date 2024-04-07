@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %} {{ site.title }} {% endblock %}
+{% block head %}
+    {{ super() }}
+{% endblock %}
+{% block content %}
+    <div id="serverDataContent" class="body">{% block server %}{% endblock %}</div>
+    <script type="text/javascript">
+        async function refreshPage(dom_elem) {
+            const a = await fetch("/server/data")
+            const b = await a.text()
+
+            const currentPlayerHash = document.getElementById("hiddenPlayersHash");
+
+            if (currentPlayerHash == null || !b.includes(currentPlayerHash.innerHTML)) {
+                console.log("Contents are different, updating...")
+                dom_elem.innerHTML = b
+            } else {
+                console.log("Same, not doing anything")
+            }
+        }
+
+        window.onload = function() {
+          var server_content = document.getElementById("serverDataContent");
+          refreshPage(server_content)
+          setInterval(refreshPage, 3000, server_content)
+        }
+    </script>
+{% endblock %}
+

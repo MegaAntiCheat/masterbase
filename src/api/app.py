@@ -1,23 +1,29 @@
 import os
 import logging
-import requests
-from datetime import datetime, timezone
-from typing import cast, BinaryIO
-from urllib.parse import urlencode
+from io import BytesIO
+from pathlib import Path
 
+import xmltodict
+import requests
+from litestar.static_files import StaticFilesConfig
+from sass import compile
+from datetime import datetime, timezone, timedelta
+from typing import cast
+from urllib.parse import urlencode
 from multidict import MultiDict
 from uvicorn import Config, Server
-
+from litestar.contrib.jinja import JinjaTemplateEngine
+from litestar.template.config import TemplateConfig
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.connection import ASGIConnection
-from litestar.exceptions import NotAuthorizedException
+from litestar.exceptions import NotAuthorizedException, PermissionDeniedException, InternalServerException
 from litestar.handlers import WebsocketListener
 from litestar.handlers.base import BaseRouteHandler
-from litestar.response import Redirect
+from litestar.response import Redirect, Template
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from api.lib import (
+from src.api.lib import (
     _check_is_active,
     _check_key_exists,
     _close_session,
@@ -33,6 +39,9 @@ from api.lib import (
     is_limited_account,
     provision_api_key,
     update_api_key,
+    get_api_key,
+    get_user_demo_info,
+    get_api_key_info,
 )
 
 logger = logging.getLogger(__name__)
@@ -56,6 +65,15 @@ def close_db_connection(app: Litestar) -> None:
     """Closes the db connection stored in the application State object."""
     if getattr(app.state, "engine", None):
         cast("Engine", app.state.engine).dispose()
+
+
+def render_scss() -> None:
+    """
+    Compiles the files in ./static/sass into a single css bundle (minified) placed in ./static/css/
+
+    This is then referenced by the Jinja2 templates
+    """
+    compile(dirname=('static/sass', 'static/css'), output_style='compressed')
 
 
 def get_async_db_connection(app: Litestar) -> Engine:
@@ -186,7 +204,7 @@ class DemoHandler(WebsocketListener):
     # populated via 'on_accept'
     api_key: str = None
     session_id: str = None
-    handle: BinaryIO = None
+    handle: BytesIO = None
 
     async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:
         engine = socket.app.state.async_engine
@@ -215,7 +233,7 @@ class DemoHandler(WebsocketListener):
             mode = "wb"
 
         streaming_sessions.add(self.session_id)
-        self.handle = open(self.path, mode)
+        self.handle = cast(BytesIO, open(self.path, mode))
 
     def on_disconnect(self, socket: WebSocket) -> None:
         logger.info("Received disconnect!")
@@ -320,7 +338,7 @@ def login(request: Request) -> Redirect:
 
 
 @get("/profile", media_type=MediaType.HTML, sync_to_thread=True)
-def profile(request: Request) -> str | Redirect:
+def profile(request: Request) -> str | Template | Redirect:
     """
     Use Steam OpenID response to authenticate access, then return stored DB detailing that players profile.
 
@@ -347,13 +365,50 @@ def profile(request: Request) -> str | Redirect:
     # if it is not in the DB or say that it already exists, and if they forgot it to let an admin know...
     # admin will then delete the steam ID of the user in the DB and a new sign in will work.
     steam_id = os.path.split(data["openid.claimed_id"])[-1]
-    engine = app.state.engine
-    has_key = check_steam_id_has_api_key(engine, steam_id)
+    try:
+        engine = app.state.engine
+        has_key = check_steam_id_has_api_key(engine, steam_id)
+    except Exception as e:
+        logger.error(e)
+        raise InternalServerException
 
+    context = {
+        'demos': [],
+        'profile_data': {},
+        'site_data': {
+            'github_url': 'https://github.com/MegaAntiCheat/',
+            'youtube_url': 'https://www.youtube.com/@megascatterbomb',
+            'title': "MasterBase Profile",
+            'tagshort': "Your MasterBase Profile"
+        }
+    }
     if has_key:
-        pass
-    else:
-        text = f"You do not have an API key! <a href='/provision'>Provision one first.</a>"
+        try:
+            _api_key = get_api_key(engine, steam_id)
+            _api_key_meta = get_api_key_info(engine, steam_id)
+            _demos_data = get_user_demo_info(engine, _api_key)
+            _xml_resp = requests.get(f"https://steamcommunity.com/profiles/{steam_id}/?xml=1").text
+            # Expect the following:
+            # dict_keys(['steamID64', 'steamID', 'onlineState', 'stateMessage', 'privacyState', 'visibilityState',
+            # 'avatarIcon', 'avatarMedium', 'avatarFull', 'vacBanned', 'tradeBanState', 'isLimitedAccount',
+            # 'customURL', 'memberSince', 'steamRating', 'hoursPlayed2Wk', 'headline', 'location', 'realname',
+            # 'summary', 'mostPlayedGames', 'groups'])
+            _profile = xmltodict.parse(_xml_resp)['profile']
+            context['profile_data']['persona_name'] = _profile['steamID']
+            context['profile_data']['steam_id'] = _profile['steamID64']
+            context['profile_data']['pfp_url'] = _profile['avatarFull']
+
+            for demo in _demos_data:
+                context['demos'].append(demo.get_dict())
+
+        except Exception as e:
+            logger.error(e)
+            raise InternalServerException
+    try:
+        _response = Template(template_name="profile.html", context=context)
+        return _response
+    except Exception as e:
+        return str(e)
 
 
 @get("/provision_handler", media_type=MediaType.HTML, sync_to_thread=True)
@@ -389,7 +444,11 @@ def provision_handler(request: Request) -> str | Redirect:
         # block limited accounts...
         limited = is_limited_account(steam_id)
         if limited:
-            return
+            return Redirect(
+                path=f"https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+                status_code=303,
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
 
         engine = app.state.engine
         is_beta_tester = check_steam_id_is_beta_tester(engine, steam_id)
@@ -398,7 +457,7 @@ def provision_handler(request: Request) -> str | Redirect:
             return "<span>You aren't a beta tester! Sorry!</span>"
 
         api_key = check_steam_id_has_api_key(engine, steam_id)
-        new_api_key = generate_uuid4_int()
+        new_api_key = str(generate_uuid4_int())
         invalidated_text = ""
         if api_key is not None:
             # invalidate old API key and provision a new one
@@ -421,16 +480,23 @@ def provision_handler(request: Request) -> str | Redirect:
         """
 
 
-
-
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
-    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler, late_bytes],
+    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler, late_bytes, login, profile],
     on_shutdown=[close_db_connection, close_async_db_connection],
+    template_config=TemplateConfig(
+        directory=Path("templates/"),
+        engine=JinjaTemplateEngine
+    ),
+    static_files_config=[
+        StaticFilesConfig(directories=["static"], path="/static/", name="static")
+    ],
+    debug=True,
 )
 
 
 def main() -> None:
+    render_scss()
     config = Config("api.app:app", host="0.0.0.0", log_level="debug", workers=os.cpu_count(), ws_ping_interval=None)
     server = Server(config)
     server.run()

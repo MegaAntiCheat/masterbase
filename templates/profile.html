@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %} {{ site_data.title }} {% endblock %}
+{% block head %}
+    {{ super() }}
+{% endblock %}
+{% block content %}
+    <div class="profile-card-x">
+        <div class="avatar"><img src="{{ profile_data.pfp_url }}" alt="profile-img"></div>
+        <div class="salutation">
+            <div class="name">{{ profile_data.persona_name }}</div>
+            <div class="designation">{{ profile_data.steam_id }}</div>
+        </div>
+        <div class="options">
+            <button class="status">
+                <img src="{{ url_for_static_asset('static', 'assets/refresh-outline.svg') }}" alt="new key" width="64px" height="64px" class="btn-img">
+                <span>Provision New API Key</span>
+            </button>
+            <button class="edit-profile">
+                <img src="{{ url_for_static_asset('static', 'assets/copy-outline.svg') }}" alt="existing key" width="64px" height="64px" class="btn-img">
+                <span>Get Current API Key</span>
+            </button>
+        </div>
+    </div>
+    <br />
+    <div class="profile-section-wrapper-block">
+        <div class="profile-section-team-header">
+            <div class="profile-section-title">
+                <h1>Uploaded Demos</h1>
+            </div>
+            <div class="profile-section-nav-buttons-block">
+                <button class="profile-section-nav-button">
+                    <svg style="margin-top: -6px; margin-left: -2px;" width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15 6L9 12L15 18" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<!--                    <?xml version="1.0" encoding="UTF-8"?><svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000"><path d="M16 12H8M8 12L11.5 15.5M8 12L11.5 8.5" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>-->
+                </button>
+                <button class="profile-section-nav-button">
+                    <svg style="margin-top: -6px; margin-left: 2px;" width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 6L15 12L9 18" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<!--                    <?xml version="1.0" encoding="UTF-8"?><svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000"><path d="M8 12H16M16 12L12.5 8.5M16 12L12.5 15.5" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>-->
+                </button>
+            </div>
+        </div>
+        <div id="1-profile-section-container-blue" class="profile-section-container-blue">
+            <div class="profile-container">
+                {% for demo_data in demos %}
+                    <div class="profile-card-wrapper">
+                        <div class="profile-card">
+                            <div class="profile-card-image">
+                                {% if 'map_picture_url' in demo_data %}
+                                    <img src="{{ demo_data['map_picture_url'] | default("https://raw.githubusercontent.com/MegaAntiCheat/MegaAntiCheat-UI/main/public/person.webp", true) }}" alt="{{ demo_data.map_name }} map icon">
+                                {% else %}
+                                    <img src="https://raw.githubusercontent.com/MegaAntiCheat/MegaAntiCheat-UI/main/public/person.webp" alt="{{ demo_data.map_name }} map icon">
+                                {% endif %}
+                            </div>
+                            <div class="profile-game-status">
+                                <h2> {{ demo_data.demo_name }}
+                                    <br />
+                                    <span class="job-title">
+                                        {{ demo_data.map_name }}
+                                    </span>
+                                </h2>
+                            </div>
+
+                            <div class="profile-details">
+                                <h2>Uploaded on {{ demo_data.end_time }}
+                                    <br />
+                                    <span class="job-title">
+                                        Length: {{ demo_data.demo_length }}
+                                    </span>
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+{% endblock %}

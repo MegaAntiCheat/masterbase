@@ -1,0 +1,127 @@
+// -----------------------------------------------------------------------------
+// This file contains all styles related to the card component.
+// -----------------------------------------------------------------------------
+
+.card {
+    border-top: solid 2px #8a2be2;
+    border-color: #8a2be2;
+    border-left: solid 0px transparent;
+    border-right: solid 0px transparent;
+    border-bottom: solid 0px transparent;
+    
+    background-color: var(--color-button);
+    position: relative;
+    color: inherit;
+    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+    border-radius: 1rem;
+  
+    &__container {
+      padding: $space-vertical 5;
+      height: 90%;
+      display: flex;
+      flex-direction: column;
+    }
+  
+    &__link {
+      /* Override default link styles */
+      text-decoration: none;
+      color: inherit;
+      background-color: var(--color-button);
+      border-radius: 1rem;
+      @include transition("md", var(--color-button));
+  
+      /* Hover, active, and focus state styles */
+      @include on-event() {
+        /* Override default link style */
+        color: inherit;
+        background-color: var(--color-mark);
+        
+        .card {
+          &__image img {
+            transform: scale(1.05);
+          }
+  
+          &__arrow {
+            transform: translateX($space-xs);
+          }
+        }
+      }
+    }
+  
+    &__tags {
+      @include wrap-items($justify: false);
+  
+      /* Make card tags smaller so they don't cover up image when card is small */
+      .tag {
+        @include text-size("caption");
+        padding: $space-sm;
+      }
+  
+      /* If card has an image, position the tags in top left corner over the image */
+      .card__image + & {
+        position: absolute;
+        // top: $space-vertical;
+      }
+    }
+  
+    &__image {
+      overflow: hidden;
+      position: relative;
+  
+      /* Reponsively fix the image aspect ratio to 16:10 with dummy before element */
+      &:before {
+        content: "";
+        display: block;
+        margin-top: 62.5%;
+      }
+  
+      img {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 2.5%;
+        right: 2.5%;
+        width: 95%;
+        height: 90%;
+        object-fit: cover;
+        @include transition("md", transform);
+      }
+    }
+  
+    &__title {
+      @include sub-heading;
+      @include text-size("h3");
+    }
+  
+    &__subtitle {
+      @include headline($impact: true);
+      @include text-size("caption");
+    }
+  
+    &__small {
+      @include text-size("caption");
+      padding-left: 2.5%;
+      padding-right: 2.5%;
+    }
+  
+    /* Remove top margin if title if there's no image or tag above it */
+    &__title:first-child,
+    /* Remove subtitle and text margins since they don't collapse with flex */
+    &__subtitle,
+    &__text {
+      margin-top: 0;
+      padding-left: 2.5%;
+      padding-right: 2.5%;
+    }
+  
+    &__arrow {
+      color: $link-color;
+      @include transition("md", transform);
+      /* Add right margin so arrow doesn't overflow when transformed on hover */
+      margin-right: $space-xs;
+      padding-left: 2.5%;
+      padding-bottom: 2.5%;
+      padding-right: 2.5%;
+    }
+  }
+  

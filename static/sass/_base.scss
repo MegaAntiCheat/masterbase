@@ -1,0 +1,151 @@
+body {
+  font-family: var(--type-serif);
+  font-size: var(--type-size);
+  font-weight: var(--type-weight);
+  line-height: var(--type-height);
+  font-variant-numeric: var(--type-numeric);
+  background-color: var(--color-background);
+  color: var(--color-text);
+}
+
+svg circle,
+svg path {
+  stroke: var(--color-text);
+  stroke-width: 0.075em;
+}
+
+a {
+  text-decoration: none;
+  color: var(--color-link);
+
+  &:focus,
+  &:hover {
+    border-bottom: calc(var(--type-size) / 10) dotted var(--color-link);
+    color: var(--color-link);
+  }
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1.5em;
+  margin-bottom: 2em;
+}
+
+footer {
+  margin: 2em 0;
+}
+
+small {
+  font-weight: 300;
+}
+
+abbr {
+  text-transform: lowercase;
+  font-family: var(--type-caps);
+}
+
+blockquote {
+  padding-left: 1em;
+  border-left: 0.1em solid var(--color-border);
+  font-weight: 300;
+}
+
+mark {
+  padding: 0.1em;
+  border-radius: 0.25em;
+  background-color: var(--color-mark);
+  color: var(--color-text);
+}
+
+hr {
+  border-top: 0.1em solid var(--color-text);
+}
+
+img {
+  display: block;
+  max-width: 100%;
+//   margin: 1em 0;
+  border-radius: 0.25em;
+  overflow: hidden;
+
+  &:hover {
+    transform: scale(2);
+    transition: transform .5s ease;
+  }
+}
+
+table.table {
+  color: var(--color-text);
+}
+
+.banner_img {
+  width: 100%;
+  height: 100px;
+  object-fit: cover;
+  object-position: center;
+  box-shadow: 2px 2px 3px 2px rgba(0, 0, 0, 0.3);
+  transition: .5s ease-in-out;
+
+  &:hover {
+    object-position: 50% 40%;
+    transition: .5s ease-in-out;
+    transform: scale(1);
+  }
+
+  &::after {
+    object-position: center;
+    transition: .5s ease-in-out;
+  }
+
+  &__full {
+    height: auto;
+  }
+
+  &__banner_text {
+    position: absolute;
+    margin-left: 7.5%;
+    top: 0.5rem;
+    text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.5);
+    letter-spacing: 0.2rem;
+  }
+
+  &__banner_icons {
+    position: absolute;
+    margin-left: 25%;
+    top: 35%;
+  }
+
+  &__banner_div {
+    position: absolute;
+    bottom: 10%;
+    margin-top: 33%;
+    padding-left: 5%;
+    padding-right: 5%;
+    width: 100%;
+    text-shadow: 2px 2px 2px  rgba(0, 0, 0, 0.5);
+    background-color: rgba(0, 0, 0, 0.66);
+  }
+}
+
+.formal_table {
+  width: 100%;
+  text-align: left;
+
+  thead {
+    border-style: solid;
+    border-width: 0.5px;
+  }
+
+  tbody {
+    border-style: solid;
+    border-width: 0.5px;
+    text-align: left;
+  }
+}
+
+.caption_text {
+  text-align: center;
+  color: var(--color-chunk);
+  margin-top: -1rem;
+}

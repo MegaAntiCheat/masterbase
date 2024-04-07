@@ -1,0 +1,86 @@
+// -----------------------------------------------------------------------------
+// This file contains all styles related to grid layouts for the site.
+//
+// It provides the following utility classes:
+//    .grid - add to a container to turn into a grid with some defaults set
+//    .grid--2 - add to .grid to generate responsive 2 column layout
+//    .grid--3 - add to .grid to generate responsive 3 column layout
+//    .grid--4 - add to .grid to generate responsive 4 column layout
+//    .grid--6 - add to .grid to generate responsive 6 column layout
+//    .grid--12 - add to .grid to generate responsive 12 column layout
+//    .grid--uneven - add to .grid to generate a responsive uneven 25% / 75% column layout
+// -----------------------------------------------------------------------------
+
+.grid {
+    display: grid;
+    column-gap: $grid-column-gap;
+    row-gap: $grid-column-gap;
+    align-items: start;
+    grid-auto-flow: dense;
+  
+    /* Two equal columns - collapses to single column on mobile */
+    &--2 {
+      @include respond-to("md") {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  
+    /* Three equal columns - collapses to single column on mobile */
+    &--3 {
+      @include respond-to("md") {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+  
+    /* Four equal columns - collapses to two on tablet and single on mobile */
+    &--4 {
+      @include respond-to("md") {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+  
+      @include respond-to("lg") {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+  
+    /* Six equal columns - collapses to four on tablet and two on mobile */
+    &--6 {
+      @include respond-to("sm") {
+        grid-template-columns: repeat(2, 1fr);
+      }
+  
+      @include respond-to("md") {
+        grid-template-columns: repeat(4, 1fr);
+      }
+  
+      @include respond-to("lg") {
+        grid-template-columns: repeat(6, 1fr);
+      }
+    }
+  
+    /* Twelve equal columns - collapses to eight on tablet and four on mobile */
+    &--12 {
+      @include respond-to("sm") {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+  
+      @include respond-to("md") {
+        grid-template-columns: repeat(8, minmax(0, 1fr));
+      }
+  
+      @include respond-to("lg") {
+        grid-template-columns: repeat(12, minmax(0, 1fr));
+      }
+    }
+  
+    /* Creates an uneven 2 column layout (narrow / wide) */
+    &--uneven {
+      grid-template-columns: 100%;
+  
+      @include respond-to("md") {
+        grid-template-columns: 25% calc(75% - #{$space-lg});
+        column-gap: $space-lg;
+      }
+    }
+  }
+  

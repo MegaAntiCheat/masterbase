@@ -1,0 +1,169 @@
+:root {
+  --type-serif: "Piazzolla", serif;
+  --type-caps: "Piazzolla SC", serif;
+  --type-mono: "Hack", monospace;
+  --type-size: 18px;
+  --type-weight: 400;
+  --type-height: 1.4;
+  --type-numeric: oldstyle-nums proportional-nums;
+  --color-particles-text: var(--oc-gray-1);
+  --color-particles-background: var(--oc-gray-9);
+}
+
+html,
+html[data-theme="light"] {
+  --color-background: var(--oc-gray-1);
+  --color-text: var(--oc-gray-8);
+  --color-heading: var(--oc-gray-8);
+  --color-link: var(--oc-blue-8);
+  --color-chunk: var(--oc-gray-8);
+  --color-mark: var(--oc-yellow-3);
+  --color-border: var(--oc-gray-4);
+  --color-button: var(--oc-gray-6);
+}
+
+html[data-theme="dark"] {
+  --color-background: var(--oc-gray-9);
+  --color-text: var(--oc-gray-3);
+  --color-heading: var(--oc-gray-3);
+  --color-link: var(--oc-blue-3);
+  --color-chunk: var(--oc-gray-8);
+  --color-mark: var(--oc-gray-8);
+  --color-border: var(--oc-gray-7);
+  --color-button: var(--oc-gray-7);
+}
+
+/// Color interval to generate tints from base colors
+/// @type Number
+$color-interval: 22% !default;
+
+/// Breakpoints map
+/// @prop {String} keys - Keys are identifiers mapped to a given length
+/// @prop {Map} values - Values are actual breakpoints expressed in pixels
+$breakpoints: (
+  "sm": 544px,
+  "md": 768px,
+  "lg": 992px,
+  "xl": 1170px,
+) !default;
+
+
+/// Opacities map
+/// @prop {String} keys - Keys are identifiers mapped to a given opacity value
+/// @prop {Map} values - Values are opacity value
+/* prettier-ignore */
+$opacities: (
+  'base': 1,      // base color, no transparency applied
+  'dark': 0.78,    // opacity used for a dark shadow
+  'medium': 0.56, // opacity used for a medium shadow
+  'light': 0.34,  // opacity used for a light shadow
+  'lightest': 0.12,  // opacity used for the lightest shadow
+) !default;
+
+/// Base spacing unit - edit this to change scale for whole site
+/// @type Length
+$space-unit: 0.5rem !default; // 8px based on browser default 1rem = 16px
+
+/// Extra small spacing (e.g. for icon and text in a button)
+/// @type Length
+$space-xs: $space-unit * 0.5; // 4px
+
+/// Small spacing (e.g. for padding inside small "piece" components like buttons)
+/// @type Length
+$space-sm: $space-unit * 1.5; // 12px
+
+/// Medium spacing (e.g. for padding inside medium "pattern" components like cards)
+/// @type Length
+$space-md: $space-unit * 3; // 24px
+
+/// Large spacing (e.g. for spacing between unrelated elements)
+/// @type Length
+$space-lg: $space-unit * 6; // 48px
+
+/// Extra large spacing (e.g. for padding inside large containers like banner or page content)
+/// @type Length
+$space-xl: $space-unit * 12; // 96px
+
+/// Vertical spacing (e.g. default line height, spacing between components)
+/// @type Length
+$space-vertical: $space-md; // 24px
+
+/// Text spacing (e.g. between headings and paragraphs)
+/// @type Length
+$space-text: $space-unit * 2; // 16px
+
+/// Spacing for a clickable area which should be min 48 x 48px
+/// @type Length
+$space-clickable: $space-unit * 6; // 48px
+
+/// Container's maximum width
+/// @type Length
+$container-max-width: calc(1170px - #{8 * $space-unit}) !default;
+
+/// Spacing between grid columns
+/// @type Length
+$grid-column-gap: $space-unit * 4; // 32px
+
+/// Default border radius
+/// @type Length
+$border-radius: 4px !default;
+
+/// Transition durations map
+/// @prop {String} keys - Identifiers for the size of the component being transitioned
+/// @prop {Map} values - Values are transition-duration values
+$transition-durations: (
+  "sm": 150ms,
+  "md": 300ms,
+  "lg": 450ms,
+);
+
+$link-color: #4b0082;
+
+/// Default transition timing function
+/// @type String
+$transition-timing-function: ease !default;
+
+/// Default transition delay
+/// @type Length
+$transition-delay: 50ms !default;
+
+/// Font sizes map - keys should be the same as in $line-heights map
+/// @prop {String} keys - Keys are identifiers mapped to a given font-size
+/// @prop {Map} values - Values are font-sizes expressed in rem
+/* prettier-ignore */
+$font-sizes: (
+  'title': 8 * $space-unit,       // 64px
+  'h1': 4.625 * $space-unit,      // 37px
+  'h2': 3.5 * $space-unit,        // 28px
+  'h3': 2.625 * $space-unit,      // 21px
+  'h4': 2 * $space-unit,          // 16px
+  'h5': 1.625 * $space-unit,      // 13px
+  'h6': 1.375 * $space-unit,      // 11px
+  'lead': 2.625 * $space-unit,    // 21px
+  'body': 2 * $space-unit,        // 16px
+  'component': 2 * $space-unit,   // 16px
+  'caption': 1.75 * $space-unit,  // 14px
+  'mini': 1.375 * $space-unit,    // 11px
+  'micro': 0.75 * $space-unit,    // 6px
+) !default;
+
+/// Line heights map - keys should be the same as in $font-sizes map
+/// Line height values should be multiples of the base space unit for vertical flow
+/// @prop {String} keys - Keys are identifiers mapped to a given line-height
+/// @prop {Map} values - Values are line-heights expressed in rem
+/* prettier-ignore */
+$line-heights: (
+  'title': 9 * $space-unit,       // 72px
+  'h1': 5 * $space-unit,          // 40px
+  'h2': 4 * $space-unit,          // 32px
+  'h3': 3 * $space-unit,          // 24px
+  'h4': 2 * $space-unit,          // 16px
+  'h5': 2 * $space-unit,          // 16px
+  'h6': 2 * $space-unit,          // 16px
+  'lead': 4 * $space-unit,        // 32px
+  'body': 3 * $space-unit,        // 24px
+  'component': 2 * $space-unit,   // 16px
+  'caption': 2 * $space-unit,     // 16px
+  'mini': 2 * $space-unit,        // 16px
+  'micro': $space-unit,           // 8px
+) !default;

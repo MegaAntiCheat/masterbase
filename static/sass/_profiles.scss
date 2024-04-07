@@ -1,0 +1,266 @@
+/**** Sass Variables ****/
+// $bodyFont: 'Open Sans', sans-serif;
+//
+//
+// * {
+//   padding: 0;
+//   margin: 0;
+//   box-sizing: border-box;
+// }
+//
+// body {
+//   font-family: $bodyFont;
+//   background: #333;
+// }
+.profile-section-container-blue {
+//   max-width: 90%;
+  margin: auto;
+  align-items: center;
+  @include scrollbars(10px, var(--bs-info), var(--color-background));
+  overflow-x: auto;
+}
+
+.profile-section-nav-icons {
+  color: var(--color-text) !important;
+  stroke: var(--color-text) !important;
+}
+
+.profile-section-wrapper-block {
+  width: 100%;
+  margin: auto;
+}
+
+.profile-section-title {
+
+}
+
+.profile-section-nav-buttons-block {
+
+}
+
+.profile-section-team-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.profile-section-nav-button {
+    border-radius: 50%;
+    border-color: rgba(255,255,255,0);
+    background-color: rgba(255,255,255,0);
+    border-width: thin;
+    border-style: solid;
+    width: max-content;
+    height: max-content;
+
+    &:hover svg {
+//         background-color: rgba(255,255,255,0.3);
+        scale: 1.5;
+        transition: all .2s ease-in-out;
+    }
+}
+
+.profile-section-container-red {
+//   max-width: 90%;
+  margin: auto;
+  align-items: center;
+  @include scrollbars(10px, var(--bs-danger), var(--color-background));
+  overflow-x: auto;
+}
+
+.profile-container {
+//   max-width: 100%;
+  display: inline-flex;
+  margin: 0 auto;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  justify-content: flex-start;
+  align-items: center;
+  height: 420px;
+}
+
+.profile-card-wrapper {
+  width: 300px;
+  height: 400px;
+  position: relative;
+}
+
+.profile-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 97.5%;
+  height: 97.5%;
+  transform: translate(-50%, -50%);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.6);
+  cursor: pointer;
+  opacity: 1;
+  transition: all .5s ease-in-out;
+
+  .profile-card-image {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    width: 100%;
+    height: 100%;
+//     z-index: 2;
+//  background-color: #000;
+    transition: .5s;
+
+    img {
+        width: 100%;
+        height: 110%;
+        object-fit: cover;
+    }
+  }
+
+  &:hover img {
+    opacity: 0.4;
+    transition: all .5s ease-in-out;
+  }
+}
+
+// .profile-card:hover .profile-card-image {
+//   transform: translateY(-100px);
+//   transition: all .45s;
+// }
+
+/**** Social Icons *****/
+
+.profile-social-icons {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 3;
+  display: flex;
+
+  li {
+    list-style: none;
+
+    a {
+      position: relative;
+      display: block;
+      width: 50px;
+      height: 50px;
+      line-height: 50px;
+      text-align: center;
+      background: #fff;
+      font-size: 23px;
+      color: #333;
+      font-weight: bold;
+      margin: 0 6px;
+      transition: .4s;
+      transform: translateY(200px);
+      opacity: 0;
+    }
+  }
+}
+
+.profile-card:hover .profile-social-icons li a {
+  transform: translateY(0px);
+  opacity: 1;
+}
+
+.profile-social-icons li a:hover {
+  background: #000;
+  transition: .2s;
+  .fab {
+    color: #fff;
+  }
+}
+
+.profile-social-icons li a .fab {
+  transition: .2s;
+
+  &:hover {
+      transform: rotateY(360deg);
+      color: #fff;
+  }
+}
+
+// .profile-card:hover li:nth-child(1) a {
+//     transition-delay: 0.1s;
+// }
+// .profile-card:hover li:nth-child(2) a {
+//   transition-delay: 0.2s;
+// }
+// .profile-card:hover li:nth-child(3) a {
+//   transition-delay: 0.3s;
+// }
+// .profile-card:hover li:nth-child(4) a {
+//   transition-delay: 0.4s;
+// }
+
+/**** Personal Details ****/
+
+.profile-game-status {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 120px;
+  z-index: 1;
+  padding: 10px;
+
+  h2 {
+    margin: 30px 0;
+    padding: 0;
+    text-align: center;
+    font-size: 100%;
+
+    .job-title {
+        font-size: 1rem;
+        line-height: 2.5rem;
+        color: var(--color-text);
+        font-weight: 300;
+    }
+  }
+}
+
+.profile-details {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  height: 120px;
+  z-index: 1;
+  padding: 10px;
+
+  h2 {
+    margin: 30px 0;
+    padding: 0;
+    text-align: center;
+    font-size: 100%;
+
+    .job-title {
+        font-size: 1rem;
+        line-height: 2.5rem;
+        color: var(--color-text);
+        font-weight: 300;
+    }
+
+    .job-title-trusted {
+        color: var(--bs-success);
+    }
+
+    .job-title-self {
+        color: var(--bs-info);
+    }
+
+    .job-title-cheater {
+        color: var(--bs-danger);
+    }
+
+    .job-title-suspicious {
+        color: var(--bs-warning);
+    }
+
+    .job-title-bot {
+        color: var(--bs-orange);
+    }
+  }
+}
+

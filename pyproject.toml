@@ -16,6 +16,8 @@ dependencies = [
     "greenlet>=3.0.3",
     "uvicorn>=0.27.1",
     "loguru>=0.7.2",
+    "libsass>=0.23.0",
+    "xmltodict>=0.13.0",
 ]
 requires-python = ">=3.10,<3.13"
 readme = "README.md"
@@ -26,6 +28,7 @@ dev = [
     "mypy>=1.8.0",
     "ruff>=0.1.9",
     "pytest>=7.4.3",
+    "bs4>=0.0.2",
 ]
 [build-system]
 requires = ["pdm-backend"]

@@ -1,0 +1,129 @@
+{% block server %}
+    <h1>{{ server_data.hostname }}</h1>
+    <h2>{{ server_data.ip }}</h2>
+    <h2>{{ server_data.map }}</h2>
+    <h2>{{ server_data.numPlayers }} / {{ server_data.maxPlayers }}</h2>
+    <br />
+    <div id="hiddenPlayersHash" style="display: none;">
+        {{ players_hash }}
+    </div>
+    <div class="profile-section-wrapper-block">
+        <div class="profile-section-team-header">
+            <div class="profile-section-title">
+                <h1>BLU</h1>
+            </div>
+            <div class="profile-section-nav-buttons-block">
+                <button class="profile-section-nav-button">
+                    <svg style="margin-top: -6px; margin-left: -2px;" width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15 6L9 12L15 18" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<!--                    <?xml version="1.0" encoding="UTF-8"?><svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000"><path d="M16 12H8M8 12L11.5 15.5M8 12L11.5 8.5" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>-->
+                </button>
+                <button class="profile-section-nav-button">
+                    <svg style="margin-top: -6px; margin-left: 2px;" width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 6L15 12L9 18" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+<!--                    <?xml version="1.0" encoding="UTF-8"?><svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" color="#000000"><path d="M8 12H16M16 12L12.5 8.5M16 12L12.5 15.5" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z" stroke="#000000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>-->
+                </button>
+            </div>
+        </div>
+        <div id="1-profile-section-container-blue" class="profile-section-container-blue">
+            <div class="profile-container">
+                {% for player in blu_players %}
+                    <div class="profile-card-wrapper">
+                        <div class="profile-card">
+                            <div class="profile-card-image">
+                                {% if 'steamInfo' in player %}
+                                    <img src="{{ player['steamInfo']['pfp'] | default("https://raw.githubusercontent.com/MegaAntiCheat/MegaAntiCheat-UI/main/public/person.webp", true) }}" alt="{{ player.name }} steam profile picture">
+                                {% else %}
+                                    <img src="https://raw.githubusercontent.com/MegaAntiCheat/MegaAntiCheat-UI/main/public/person.webp" alt="{{ player.name }} steam profile picture">
+                                {% endif %}
+                            </div>
+
+                            <div class="profile-game-status">
+                                <h2>{{ player.gameInfo.time | s_into_hms }}
+                                    <br />
+                                    <span class="job-title">
+                                        {{ player.gameInfo.kills }}/{{ player.gameInfo.deaths }}
+                                    </span>
+                                </h2>
+                            </div>
+
+                            <div class="profile-details">
+                                <h2>{{ player.name }}
+                                    <br />
+                                    {% if player.isSelf %}
+                                    <span class="job-title job-title-self">
+                                        You
+                                    </span>
+                                    {% else %}
+                                    <span class="job-title job-title-{{ player.localVerdict.lower() if player.localVerdict != 'None' else 'player' }}">
+                                        {{ player.localVerdict if player.localVerdict != 'None' else 'Player' }}
+                                    </span>
+                                    {% endif %}
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+    <br />
+
+    <div class="profile-section-wrapper-block">
+        <div class="profile-section-team-header">
+            <div class="profile-section-title">
+                <h1>RED</h1>
+            </div>
+            <div class="profile-section-nav-buttons-block">
+                <button class="profile-section-nav-button">
+                    <svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M15 6L9 12L15 18" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </button>
+                <button class="profile-section-nav-button">
+                    <svg width="24px" height="24px" stroke-width="1.5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M9 6L15 12L9 18" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </button>
+            </div>
+        </div>
+        <div id="2-profile-section-container-red" class="profile-section-container-red">
+            <div class="profile-container">
+                {% for player in red_players %}
+                    <div class="profile-card-wrapper">
+                        <div class="profile-card">
+                            <div class="profile-card-image">
+                                {% if 'steamInfo' in player %}
+                                    <img src="{{ player['steamInfo']['pfp'] | default("https://raw.githubusercontent.com/MegaAntiCheat/MegaAntiCheat-UI/main/public/person.webp", true) }}" alt="{{ player.name }} steam profile picture">
+                                {% else %}
+                                    <img src="https://raw.githubusercontent.com/MegaAntiCheat/MegaAntiCheat-UI/main/public/person.webp" alt="{{ player.name }} steam profile picture">
+                                {% endif %}
+                            </div>
+
+                            <div class="profile-game-status">
+                                <h2>{{ player.gameInfo.time | s_into_hms }}
+                                    <br />
+                                    <span class="job-title">
+                                        {{ player.gameInfo.kills }}/{{ player.gameInfo.deaths }}
+                                    </span>
+                                </h2>
+                            </div>
+
+                            <div class="profile-details">
+                                <h2>{{ player.name }}
+                                    <br />
+                                    {% if player.isSelf %}
+                                    <span class="job-title job-title-self">
+                                        You
+                                    </span>
+                                    {% else %}
+                                    <span class="job-title job-title-{{ player.localVerdict.lower() if player.localVerdict != 'None' else 'player' }}">
+                                        {{ player.localVerdict if player.localVerdict != 'None' else 'Player' }}
+                                    </span>
+                                    {% endif %}
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+{% endblock %}
+

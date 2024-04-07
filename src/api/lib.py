@@ -1,15 +1,19 @@
 import os
-from datetime import datetime, timezone
+import logging
+from dataclasses import dataclass
+from datetime import datetime, timezone, timedelta
 from uuid import uuid4
 from xml.etree import ElementTree
+from typing import Self, cast
 
 import requests
 import sqlalchemy as sa
-from sqlalchemy import Engine
+from sqlalchemy import Engine, Row
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
+logger = logging.getLogger(__name__)
 
 
 def _make_db_uri(async_url: bool = False) -> str:
@@ -252,7 +256,66 @@ def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
         conn.commit()
 
 
-def get_api_key_info(engine: Engine, steam_id: str) -> list[str] | None:
+@dataclass
+class DemoWrapper:
+    demo_id: str = None
+    api_key: str = None
+    demo_name: str = None
+    active: bool = None
+    start_time: datetime = None
+    end_time: datetime = None
+    fake_ip: str = None
+    map: str = None
+    steam_api_data: str = None
+    ingested: bool = None
+    demo_oid: int = None
+    late_bytes: bytes = None
+    created_at: datetime = None
+    updated_at: datetime = None
+    map_picture_url: str = None
+
+    def get_dict(self) -> dict:
+        _demo_len = self.demo_length()
+        return {
+            "demo_id": self.demo_id,
+            "api_key": self.api_key,
+            "demo_name": self.demo_name,
+            "demo_length": f"{str(_demo_len.seconds // 3600).zfill(2)}:"
+                           f"{str(_demo_len.seconds // 60 % 60).zfill(2)}:"
+                           f"{str(_demo_len.seconds % 60).zfill(2)}",
+            "active": self.active,
+            "start_time": self.start_time.strftime("%m/%d/%Y, %H:%M:%S"),
+            "end_time": self.end_time.strftime("%m/%d/%Y, %H:%M:%S"),
+            "fake_ip": self.fake_ip,
+            "map_name": self.map,
+            "steam_api_data": self.steam_api_data,
+            "ingested": self.ingested,
+            "demo_oid": self.demo_oid,
+            "late_bytes": self.late_bytes,
+            "created_at": self.created_at.strftime("%m/%d/%Y, %H:%M:%S"),
+            "updated_at": self.updated_at.strftime("%m/%d/%Y, %H:%M:%S"),
+            "map_picture_url": self.map_picture_url,
+        }
+
+    def demo_length(self) -> timedelta:
+        return self.end_time - self.start_time
+
+    @classmethod
+    def from_db_row(cls, row: Row, *, hide_api_key: bool = True) -> Self:
+        """
+        Construct a DemoWrapper helper dataclass around the returned tuple from sqlalchemy. Making assumptions
+        about the tuple order here...
+        """
+        logger.info(f"Creating DemoWrapper for result: {row}")
+        _row_tuple: tuple = cast(tuple, row)  # sqlalchemy.Row is actually a tuple at runtime. This makes the type
+        # checker happy.
+        result = DemoWrapper(*_row_tuple)
+        if hide_api_key:
+            result.api_key = '0'
+        return result
+
+
+def get_api_key_info(engine: Engine, steam_id: str) -> list[datetime] | None:
     """
     Get the metadata for an API key (i.e. when was it created, when was it updated)
 
@@ -281,26 +344,25 @@ def get_api_key(engine: Engine, steam_id: str) -> str | None:
         if not result:
             return None
 
-        return list(result)[0]
+        return result[0]
 
 
-def get_user_demo_info(engine: Engine, api_key: str) -> list[str] | None:
+def get_user_demo_info(engine: Engine, api_key: str) -> list[DemoWrapper] | None:
     """
     Get the number of demos that the given api_key has uploaded
     """
     with engine.connect() as conn:
         result = conn.execute(
-            sa.text("SELECT COUNT(*), "
-                    "demo_name, "
-                    "map, "
-                    "created_time, "
-                    "end_time FROM demo_sessions WHERE api_key = :api_key"), {"api_key": api_key}
-        ).one_or_none()
+            sa.text("SELECT * FROM demo_sessions WHERE api_key = :api_key"), {"api_key": api_key}
+        ).all()
 
         if not result:
             return None
 
-        return list(result)
+        demos: list[DemoWrapper] = []
+        for row in result:
+            demos.append(DemoWrapper.from_db_row(row))
+        return demos
     
     
 def is_limited_account(steam_id: str) -> bool:

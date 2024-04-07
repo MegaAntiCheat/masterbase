@@ -1,0 +1,290 @@
+// -----------------------------------------------------------------------------
+// This file contains all application-wide Sass mixins.
+// -----------------------------------------------------------------------------
+
+/// Event wrapper
+/// @author Harry Roberts
+/// @param {Bool} $self [false] - Whether or not to include current selector
+/// @link https://twitter.com/csswizardry/status/478938530342006784 Original tweet from Harry Roberts
+@mixin on-event($self: false) {
+    @if $self {
+      &,
+      &:hover,
+      &:active,
+      &:focus {
+        @content;
+      }
+    } @else {
+      &:hover,
+      &:active,
+      &:focus {
+        @content;
+      }
+    }
+  }
+  
+  /// Mixin to manage responsive breakpoints
+  /// @author Hugo Giraudel
+  /// @param {String} $breakpoint - Breakpoint name
+  /// @require $breakpoints
+  @mixin respond-to($breakpoint) {
+    // If the key exists in the map
+    @if map-has-key($breakpoints, $breakpoint) {
+      // Prints a media query based on the value
+      @media (min-width: map-get($breakpoints, $breakpoint)) {
+        @content;
+      }
+    }
+  
+    // If the key doesn't exist in the map
+    @else {
+      @warn "Unfortunately, no value could be retrieved from `#{$breakpoint}`. "
+          + "Available breakpoints are: #{map-keys($breakpoints)}.";
+    }
+  }
+  
+  /// Mixin to respond to small screens only
+  @mixin small-screens-only() {
+    @media (max-width: (map-get($breakpoints, "md") - 1px)) {
+      @content;
+    }
+  }
+  
+  /// Mixin to return z-index value
+  /// @param {String} $key - Component name
+  /// @require $z-index
+  @mixin z-index($key) {
+    // If the key exists in the map
+    @if map-has-key($z-index, $key) {
+      // Set the z-index value
+      z-index: map-get($z-index, $key);
+    }
+  
+    // If the key doesn't exist in the map
+    @else {
+      @warn "Unfortunately, no z-index value could be retrieved for `#{$key}`. "
+          + "Available keys are: #{map-keys($z-index)}.";
+    }
+  }
+  
+  /// Mixin to hide element while making it readable for screen readers.
+  /// Element will not be visible when focussed or active - use the .visually-hidden helper class if you need that (e.g. skip links)
+  /// Adapted from: https://www.a11yproject.com/posts/2013-01-11-how-to-hide-content/
+  @mixin visually-hide() {
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+  }
+  
+  /// Mimic native browser focus styles
+  /// @author @ghinda
+  /// @link https://ghinda.net/article/mimic-native-focus-css/Original
+  @mixin unreal-focus() {
+    outline-width: 2px;
+    outline-style: solid;
+    outline-color: Highlight;
+  
+    /* WebKit gets its native focus styles. */
+    @media (-webkit-min-device-pixel-ratio: 0) {
+      outline-color: -webkit-focus-ring-color;
+      outline-style: auto;
+    }
+  }
+  
+  /// Mixin for transitions - you get to specify a key mapped to a transition-duration and the transition properties, all other transition settings (easing function and delay) are controlled by this mixin
+  /// @param {String} $component-size - key for transition duration based on size of component: 'sm', 'md', or 'lg'
+  /// @param {String} $properties - pass in any number of properties
+  /// @require $transition-durations
+  /// @require $transition-timing-function
+  /// @require $transition-delay
+  /// @example fast transition for changes on small elements, e.g. a link or a button
+  ///   @include transition('sm', color, box-shadow);
+  /// @example medium transition for changes on medium elements, e.g. a card
+  ///   @include transition('md', background-color, transform);
+  /// @example slow transition for changes on large elements, e.g. large panel, modal
+  ///   @include transition('lg', left);
+  
+  @mixin transition($duration-key, $properties...) {
+    // Default values
+    $transition-duration: map-get($transition-durations, $duration-key);
+    $unfoldedTransitions: ();
+    @each $property in $properties {
+      $unfoldedTransitions: append(
+        $unfoldedTransitions,
+        (
+          $property
+            $transition-duration
+            $transition-timing-function
+            $transition-delay
+        ),
+        comma
+      );
+    }
+  
+    transition: $unfoldedTransitions;
+  }
+  
+  /// Mixin for shared styles for overlays that sit behind temporary elements to hide page content
+  @mixin overlay() {
+    position: absolute; // fallback for browsers that don't support position: fixed;
+    position: fixed;
+    display: block;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: $overlay-color;
+    cursor: default;
+  }
+  
+  /// Mixin for shared styles for off canvas menus like the mobile nav and search menu
+  @mixin off-canvas-menu() {
+    position: absolute; // fallback for browsers that don't support position: fixed;
+    position: fixed;
+    top: 0;
+    width: $off-canvas-menu-width;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: visible;
+    background: $white;
+  }
+  
+  // -----------------------------------------------------------------------------
+  // Typography mixins
+  // -----------------------------------------------------------------------------
+  
+  /// Mixin for headline text styles
+  /// @param {Bool} $impact [false] - Whether or not to capitalise text for IMPACT
+  @mixin headline($impact: false) {
+    font-weight: 400;
+    letter-spacing: -0.005em; // equiv to tracking -5
+    font-kerning: normal;
+  
+    @if $impact {
+      text-transform: uppercase;
+      // line height should be 1 for impact headlines
+      line-height: 1;
+    }
+  }
+  
+  /// Mixin for sub-heading text styles
+  @mixin sub-heading() {
+    font-weight: 600;
+    padding-left: 2.5%;
+    padding-right: 2.5%;
+  }
+  
+  /// Mixin for body copy text styles
+  @mixin body-copy() {
+    font-weight: 300;
+    padding-left: 2.5%;
+    padding-right: 2.5%;
+  }
+  
+  /// Mixin to generate font-size and line-height based on specified key
+  /// @param {String} $key - Key for text size
+  /// @require $font-sizes
+  /// @require $line-heights
+  @mixin text-size($key) {
+    // Prints font-size based on the key
+    @if map-has-key($font-sizes, $key) {
+      // If the key exists in the map
+      font-size: map-get($font-sizes, $key);
+    } @else {
+      // If the key doesn't exist in the map
+      @warn "Unfortunately, no value could be retrieved from `#{$key}`. "
+          + "Available keys are: #{map-keys($font-sizes)}.";
+    }
+  
+    // Prints line-height based on the key
+    @if map-has-key($line-heights, $key) {
+      // If the key exists in the map
+      line-height: map-get($line-heights, $key);
+    } @else {
+      // If the key doesn't exist in the map
+      @warn "Unfortunately, no value could be retrieved from `#{$key}`. "
+          + "Available keys are: #{map-keys($line-heights)}.";
+    }
+  }
+  
+  /// Mixin for text component styles (e.g. buttons, text links, tags)
+  @mixin text-component() {
+    @include headline;
+    @include text-size("component");
+    display: inline-block;
+    padding: $space-text; // 16px - center text in component
+    vertical-align: top;
+    white-space: nowrap;
+  }
+  
+  /// Mixin that turns something into a flex container and wraps its children over multiple rows and gives them a small margin
+  /// @param {Bool} $justify [true] - Whether or not to justify the items inside
+  @mixin wrap-items($justify: true) {
+    display: flex;
+    flex-wrap: wrap;
+    margin: -1 * $space-xs;
+  
+    > * { 
+      @if $justify {
+        flex: 1 0 auto;
+      }
+      margin: $space-xs;
+    }
+  }
+  
+  /// Mixin that sets appropriate color styles for a contrast section e.g. alternate sections on a feature page
+  @mixin contrast-section() {
+    background: $contrast-section-bg-color;
+    color: $contrast-section-text-color;
+  
+    .card__link {
+      @include on-event {
+        background-color: $contrast-section-hover-color;
+      }
+    }
+  }
+  
+  @mixin breakpoint($point) {
+    @if $point == desktop {
+      @media (min-width: $desktop) {
+        @content;
+      }
+    }
+  }
+
+ @mixin scrollbars($size, $foreground-color, $background-color: mix($foreground-color, white,  50%)) {
+    // For Google Chrome
+    &::-webkit-scrollbar {
+      width:  $size;
+      height: $size;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background-color: red;
+      border: 4px solid transparent;
+      border-radius: 8px;
+      background-clip: padding-box;
+    }
+
+    &::-webkit-scrollbar-thumb {
+      background: $foreground-color;
+    }
+
+    &::-webkit-scrollbar-track {
+      background: $background-color;
+    }
+
+    &::-webkit-scrollbar-corner {
+      background-color: transparent;
+    }
+
+    // For Internet Explorer
+    & {
+      scrollbar-face-color: $foreground-color;
+      scrollbar-track-color: $background-color;
+    }
+  }
