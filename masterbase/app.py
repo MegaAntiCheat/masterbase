@@ -23,6 +23,7 @@ from masterbase.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     close_session_helper,
+    demodata_helper,
     generate_uuid4_int,
     is_limited_account,
     late_bytes_helper,
@@ -159,6 +160,14 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     late_bytes_helper(engine, api_key, late_bytes, current_time)
 
     return {"late_bytes": True}
+
+
+@get("/demodata", guards=[valid_key_guard], sync_to_thread=False)
+def demodata(request: Request, api_key: str, session_id: str) -> bytes:
+    """Return the demo."""
+    engine = request.app.state.engine
+    data = demodata_helper(engine, api_key, session_id)
+    return data
 
 
 class DemoHandler(WebsocketListener):

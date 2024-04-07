@@ -263,6 +263,26 @@ def late_bytes_helper(engine: Engine, api_key: str, late_bytes: bytes, current_t
         conn.commit()
 
 
+def demodata_helper(engine: Engine, api_key: str, session_id: str) -> bytes:
+    """Return demo data as bytes."""
+    sql = """
+        SELECT loid, STRING_AGG(data, '' ORDER BY pageno) AS all_data
+        FROM pg_largeobject
+        JOIN demo_sessions demo ON demo.demo_oid = pg_largeobject.loid
+        WHERE demo.session_id = :session_id
+        GROUP BY loid;
+    """
+    with engine.connect() as conn:
+        result = conn.execute(sa.text(sql), dict(session_id=session_id))
+
+        row = result.fetchone()
+
+        if row is not None:
+            return row[0].encode("utf-8") if row[0] else b""
+
+        return b""
+
+
 def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
     """Check that a given steam id has an API key or not."""
     with engine.connect() as conn:
