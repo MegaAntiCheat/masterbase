@@ -305,7 +305,9 @@ def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[
                     logger.info(f"Session {session_id} has no late_bytes!")
                     yield bytestream
                 else:
+                    # strip the \x from the string
                     late_bytes = bytes.fromhex(_late_bytes[2:])
+                    # bytesurgeon >:D
                     bytestream = bytestream[:0x420] + late_bytes + bytestream[0x430:]
                     yield bytestream
             else:
