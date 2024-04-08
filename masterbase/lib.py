@@ -1,5 +1,6 @@
 """Library code for application."""
 
+import logging
 import os
 from datetime import datetime, timezone
 from typing import IO, Generator
@@ -11,6 +12,8 @@ import sqlalchemy as sa
 from litestar import WebSocket
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+logger = logging.getLogger(__name__)
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
@@ -292,8 +295,21 @@ def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[
     with engine.connect() as conn:
         result = conn.execute(sa.text(sql), dict(session_id=session_id))
 
-        for row in result:
-            yield row[1].tobytes()
+        for i, row in enumerate(result):
+            # probably not the best check but always here...
+            bytestream = row[1].tobytes()
+            if i == 0:
+                sql = "SELECT late_bytes from demo_sessions where session_id = :session_id;"
+                _late_bytes = conn.execute(sa.text(sql), dict(session_id=session_id)).scalar_one()
+                if _late_bytes is None:
+                    logger.info(f"Session {session_id} has no late_bytes!")
+                    yield bytestream
+                else:
+                    late_bytes = bytes.fromhex(_late_bytes[2:])
+                    bytestream = bytestream[:0x420] + late_bytes + bytestream[0x430:]
+                    yield bytestream
+            else:
+                yield bytestream
 
 
 def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
