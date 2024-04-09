@@ -3,7 +3,7 @@
 import logging
 import os
 from datetime import datetime, timezone
-from typing import IO, Generator
+from typing import IO, Any, Generator
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -87,6 +87,33 @@ async def check_is_active(engine: AsyncEngine, api_key: str) -> bool:
         is_active = bool(data)
 
         return is_active
+
+
+async def check_analyst(engine: AsyncEngine, api_key: str) -> bool:
+    """Determine if a user is in an analyst session."""
+    sql = """
+        SELECT
+            *
+        FROM
+            api_keys
+        JOIN
+            analyst_steam_ids ON analyst_steam_ids.steam_id = api_keys.steam_id
+        WHERE
+            api_keys.api_key = :api_key
+        ;
+    """
+    params = {"api_key": api_key}
+
+    async with engine.connect() as conn:
+        _result = await conn.execute(
+            sa.text(sql),
+            params,
+        )
+
+        result = _result.one_or_none()
+        analyst = True if result is not None else False
+
+        return analyst
 
 
 async def session_closed(engine: AsyncEngine, session_id: str) -> bool:
@@ -310,6 +337,27 @@ def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[
                     yield bytestream
             else:
                 yield bytestream
+
+
+def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number: int) -> list[dict[str, Any]]:
+    """List all demos in the DB for a user with pagination."""
+    offset = (page_number - 1) * page_size
+
+    sql = """
+    SELECT
+        demo_name, session_id, map, start_time, end_time
+    FROM demo_sessions
+    WHERE
+        api_key = :api_key
+        AND active = false
+    LIMIT :page_size OFFSET :offset
+    ;
+    """
+
+    with engine.connect() as conn:
+        data = conn.execute(sa.text(sql), {"api_key": api_key, "page_size": page_size, "offset": offset})
+
+    return [row._asdict() for row in data.all()]
 
 
 def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:

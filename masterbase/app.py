@@ -18,6 +18,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.lib import (
+    check_analyst,
     check_is_active,
     check_key_exists,
     check_steam_id_has_api_key,
@@ -27,6 +28,7 @@ from masterbase.lib import (
     generate_uuid4_int,
     is_limited_account,
     late_bytes_helper,
+    list_demos_helper,
     make_db_uri,
     make_demo_path,
     provision_api_key,
@@ -81,6 +83,16 @@ async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> No
 
     async_engine = connection.app.state.async_engine
     exists = await check_key_exists(async_engine, api_key)
+    if not exists:
+        raise NotAuthorizedException()
+
+
+async def analyst_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+    """Guard clause to User is an analyst."""
+    api_key = connection.query_params["api_key"]
+
+    async_engine = connection.app.state.async_engine
+    exists = await check_analyst(async_engine, api_key)
     if not exists:
         raise NotAuthorizedException()
 
@@ -173,7 +185,21 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     return {"late_bytes": True}
 
 
-@get("/demodata", guards=[valid_key_guard, session_closed_guard], sync_to_thread=False)
+@get("/list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+def list_demos(
+    request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
+) -> list[dict[str, str]]:
+    """List demo data."""
+    if page_size is None or page_size >= 50 or page_size < 1:
+        page_size = 50
+    if page_number is None or page_number < 1:
+        page_number = 1
+    engine = request.app.state.engine
+    demos = list_demos_helper(engine, api_key, page_size, page_number)
+    return demos
+
+
+@get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard], sync_to_thread=False)
 def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
     engine = request.app.state.engine
@@ -345,7 +371,16 @@ def provision_handler(request: Request) -> str:
 
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
-    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler, late_bytes, demodata],
+    route_handlers=[
+        session_id,
+        close_session,
+        DemoHandler,
+        provision,
+        provision_handler,
+        late_bytes,
+        demodata,
+        list_demos,
+    ],
     on_shutdown=[close_db_connection, close_async_db_connection],
 )
 
