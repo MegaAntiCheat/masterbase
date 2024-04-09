@@ -300,13 +300,11 @@ def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[
             bytestream = row[1].tobytes()
             if i == 0:
                 sql = "SELECT late_bytes from demo_sessions where session_id = :session_id;"
-                _late_bytes = conn.execute(sa.text(sql), dict(session_id=session_id)).scalar_one()
-                if _late_bytes is None:
+                late_bytes = conn.execute(sa.text(sql), dict(session_id=session_id)).scalar_one()
+                if late_bytes is None:
                     logger.info(f"Session {session_id} has no late_bytes!")
                     yield bytestream
                 else:
-                    # strip the \x from the string
-                    late_bytes = bytes.fromhex(_late_bytes[2:])
                     # bytesurgeon >:D
                     bytestream = bytestream[:0x420] + late_bytes + bytestream[0x430:]
                     yield bytestream
