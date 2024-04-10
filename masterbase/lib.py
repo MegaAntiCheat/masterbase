@@ -320,23 +320,24 @@ def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[
         ORDER BY pageno;
     """
     with engine.connect() as conn:
-        result = conn.execute(sa.text(sql), dict(session_id=session_id))
+        with conn.execution_options(stream_results=True) as stream_conn:
+            result = stream_conn.execute(sa.text(sql), dict(session_id=session_id))
 
-        for i, row in enumerate(result):
-            # probably not the best check but always here...
-            bytestream = row[1].tobytes()
-            if i == 0:
-                sql = "SELECT late_bytes from demo_sessions where session_id = :session_id;"
-                late_bytes = conn.execute(sa.text(sql), dict(session_id=session_id)).scalar_one()
-                if late_bytes is None:
-                    logger.info(f"Session {session_id} has no late_bytes!")
-                    yield bytestream
+            for i, row in enumerate(result):
+                # probably not the best check but always here...
+                bytestream = row[1].tobytes()
+                if i == 0:
+                    sql = "SELECT late_bytes from demo_sessions where session_id = :session_id;"
+                    late_bytes = conn.execute(sa.text(sql), dict(session_id=session_id)).scalar_one()
+                    if late_bytes is None:
+                        logger.info(f"Session {session_id} has no late_bytes!")
+                        yield bytestream
+                    else:
+                        # bytesurgeon >:D
+                        bytestream = bytestream[:0x420] + late_bytes + bytestream[0x430:]
+                        yield bytestream
                 else:
-                    # bytesurgeon >:D
-                    bytestream = bytestream[:0x420] + late_bytes + bytestream[0x430:]
                     yield bytestream
-            else:
-                yield bytestream
 
 
 def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number: int) -> list[dict[str, Any]]:
