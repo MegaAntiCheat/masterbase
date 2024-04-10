@@ -26,6 +26,7 @@ from masterbase.lib import (
     close_session_helper,
     demodata_helper,
     generate_uuid4_int,
+    get_demo_size,
     is_limited_account,
     late_bytes_helper,
     list_demos_helper,
@@ -203,8 +204,12 @@ def list_demos(
 def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
     engine = request.app.state.engine
+    size = get_demo_size(engine, session_id)
     bytestream_generator = demodata_helper(engine, api_key, session_id)
-    headers = {"Content-Disposition": f'attachment; filename="{session_id}.dem"'}
+    headers = {
+        "Content-Disposition": f'attachment; filename="{session_id}.dem"',
+        "Content-Length": size,
+    }
     return Stream(bytestream_generator, media_type=MediaType.TEXT, headers=headers)
 
 

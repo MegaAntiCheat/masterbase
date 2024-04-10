@@ -215,6 +215,7 @@ def _close_session_with_demo(
 ) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
+        size = os.stat(demo_path).st_size
         oid = conn.connection.lobject(mode="w", new_file=demo_path).oid  # type: ignore
         conn.execute(
             sa.text(
@@ -223,6 +224,7 @@ def _close_session_with_demo(
                 active = False,
                 end_time = :end_time,
                 demo_oid = :demo_oid,
+                demo_size = :demo_size,
                 updated_at = :updated_at
                 WHERE
                 api_key = :api_key AND
@@ -233,6 +235,7 @@ def _close_session_with_demo(
                 "session_id": session_id,
                 "end_time": current_time.isoformat(),
                 "updated_at": current_time.isoformat(),
+                "demo_size": size,
                 "demo_oid": oid,
             },
         )
@@ -310,6 +313,15 @@ def late_bytes_helper(engine: Engine, api_key: str, late_bytes: bytes, current_t
         conn.commit()
 
 
+def get_demo_size(engine: Engine, session_id: str) -> str:
+    """Get the size of a demo."""
+    sql = "SELECT demo_size FROM demo_sessions WHERE session_id = :session_id;"
+    with engine.connect() as conn:
+        size = conn.execute(sa.text(sql), dict(session_id=session_id)).scalar_one()
+
+        return str(size)
+
+
 def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[bytes, None, None]:
     """Yield demo data page by page."""
     sql = """
@@ -346,7 +358,7 @@ def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number:
 
     sql = """
     SELECT
-        demo_name, session_id, map, start_time, end_time
+        demo_name, session_id, map, start_time, end_time, demo_size
     FROM
         demo_sessions
     WHERE
