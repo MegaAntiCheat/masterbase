@@ -1,8 +1,9 @@
 """Library code for application."""
 
+import logging
 import os
 from datetime import datetime, timezone
-from typing import IO
+from typing import IO, Any, Generator
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -11,6 +12,8 @@ import sqlalchemy as sa
 from litestar import WebSocket
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+logger = logging.getLogger(__name__)
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
@@ -21,7 +24,7 @@ def make_db_uri(is_async: bool = False) -> str:
     user = os.environ["POSTGRES_USER"]
     password = os.environ["POSTGRES_PASSWORD"]
     host = os.environ.get("POSTGRES_HOST", "localhost")
-    port = os.environ.get("POSTGRES_PORT", "8050")
+    port = os.environ.get("POSTGRES_PORT", "5432")
     prefix = "postgresql"
     if is_async:
         prefix = f"{prefix}+asyncpg"
@@ -70,7 +73,7 @@ async def check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
 
 
 async def check_is_active(engine: AsyncEngine, api_key: str) -> bool:
-    """Determine if a session is active."""
+    """Determine if a user is in an active session."""
     sql = "SELECT * FROM demo_sessions WHERE api_key = :api_key and active = true;"
     params = {"api_key": api_key}
 
@@ -84,6 +87,50 @@ async def check_is_active(engine: AsyncEngine, api_key: str) -> bool:
         is_active = bool(data)
 
         return is_active
+
+
+async def check_analyst(engine: AsyncEngine, api_key: str) -> bool:
+    """Determine if a user is in an analyst session."""
+    sql = """
+        SELECT
+            *
+        FROM
+            api_keys
+        JOIN
+            analyst_steam_ids ON analyst_steam_ids.steam_id = api_keys.steam_id
+        WHERE
+            api_keys.api_key = :api_key
+        ;
+    """
+    params = {"api_key": api_key}
+
+    async with engine.connect() as conn:
+        _result = await conn.execute(
+            sa.text(sql),
+            params,
+        )
+
+        result = _result.one_or_none()
+        analyst = True if result is not None else False
+
+        return analyst
+
+
+async def session_closed(engine: AsyncEngine, session_id: str) -> bool:
+    """Determine if a session is active."""
+    sql = "SELECT active FROM demo_sessions WHERE session_id = :session_id;"
+    params = {"session_id": session_id}
+
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            sa.text(sql),
+            params,
+        )
+
+        data = result.scalar_one_or_none()
+        closed = not data
+
+        return closed
 
 
 def start_session_helper(
@@ -261,6 +308,57 @@ def late_bytes_helper(engine: Engine, api_key: str, late_bytes: bytes, current_t
             },
         )
         conn.commit()
+
+
+def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[bytes, None, None]:
+    """Yield demo data page by page."""
+    sql = """
+        SELECT pageno, data
+        FROM pg_largeobject
+        JOIN demo_sessions demo ON demo.demo_oid = pg_largeobject.loid
+        WHERE demo.session_id = :session_id
+        ORDER BY pageno;
+    """
+    with engine.connect() as conn:
+        with conn.execution_options(stream_results=True, fetch_size=100) as stream_conn:
+            result = stream_conn.execute(sa.text(sql), dict(session_id=session_id))
+
+            for i, row in enumerate(result):
+                # probably not the best check but always here...
+                bytestream = row[1].tobytes()
+                if i == 0:
+                    sql = "SELECT late_bytes from demo_sessions where session_id = :session_id;"
+                    late_bytes = conn.execute(sa.text(sql), dict(session_id=session_id)).scalar_one()
+                    if late_bytes is None:
+                        logger.info(f"Session {session_id} has no late_bytes!")
+                        yield bytestream
+                    else:
+                        # bytesurgeon >:D
+                        bytestream = bytestream[:0x420] + late_bytes + bytestream[0x430:]
+                        yield bytestream
+                else:
+                    yield bytestream
+
+
+def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number: int) -> list[dict[str, Any]]:
+    """List all demos in the DB for a user with pagination."""
+    offset = (page_number - 1) * page_size
+
+    sql = """
+    SELECT
+        demo_name, session_id, map, start_time, end_time
+    FROM
+        demo_sessions
+    WHERE
+        active = false
+    LIMIT :page_size OFFSET :offset
+    ;
+    """
+
+    with engine.connect() as conn:
+        data = conn.execute(sa.text(sql), {"page_size": page_size, "offset": offset})
+
+    return [row._asdict() for row in data.all()]
 
 
 def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:

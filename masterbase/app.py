@@ -13,22 +13,26 @@ from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.handlers.base import BaseRouteHandler
-from litestar.response import Redirect
+from litestar.response import Redirect, Stream
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.lib import (
+    check_analyst,
     check_is_active,
     check_key_exists,
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     close_session_helper,
+    demodata_helper,
     generate_uuid4_int,
     is_limited_account,
     late_bytes_helper,
+    list_demos_helper,
     make_db_uri,
     make_demo_path,
     provision_api_key,
+    session_closed,
     session_id_from_handle,
     start_session_helper,
     update_api_key,
@@ -83,6 +87,16 @@ async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> No
         raise NotAuthorizedException()
 
 
+async def analyst_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+    """Guard clause to User is an analyst."""
+    api_key = connection.query_params["api_key"]
+
+    async_engine = connection.app.state.async_engine
+    exists = await check_analyst(async_engine, api_key)
+    if not exists:
+        raise NotAuthorizedException()
+
+
 async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
     """Assert that the user is not currently in a session."""
     async_engine = connection.app.state.async_engine
@@ -104,6 +118,16 @@ async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHand
     is_active = await check_is_active(async_engine, api_key)
     if not is_active:
         raise PermissionDeniedException(detail="User is not in a session, create one at `/session_id`!")
+
+
+async def session_closed_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+    """Assert that the session is closed."""
+    async_engine = connection.app.state.async_engine
+
+    session_id = connection.query_params["session_id"]
+    closed = await session_closed(async_engine, session_id)
+    if not closed:
+        raise PermissionDeniedException(detail="Session is still active, cannot retrieve data!")
 
 
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
@@ -161,6 +185,29 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     return {"late_bytes": True}
 
 
+@get("/list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+def list_demos(
+    request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
+) -> list[dict[str, str]]:
+    """List demo data."""
+    if page_size is None or page_size >= 50 or page_size < 1:
+        page_size = 50
+    if page_number is None or page_number < 1:
+        page_number = 1
+    engine = request.app.state.engine
+    demos = list_demos_helper(engine, api_key, page_size, page_number)
+    return demos
+
+
+@get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard], sync_to_thread=False)
+def demodata(request: Request, api_key: str, session_id: str) -> Stream:
+    """Return the demo."""
+    engine = request.app.state.engine
+    bytestream_generator = demodata_helper(engine, api_key, session_id)
+    headers = {"Content-Disposition": f'attachment; filename="{session_id}.dem"'}
+    return Stream(bytestream_generator, media_type=MediaType.TEXT, headers=headers)
+
+
 class DemoHandler(WebsocketListener):
     """Custom Websocket Class."""
 
@@ -205,7 +252,7 @@ class DemoHandler(WebsocketListener):
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
         """Write data on disconnect."""
         session_id = session_id_from_handle(streaming_sessions[socket])
-        logger.info(f"Sinking {len(data)} bytes to to {session_id}")
+        logger.info(f"Sinking {len(data)} bytes to {session_id}")
         streaming_sessions[socket].write(data)
 
 
@@ -324,14 +371,25 @@ def provision_handler(request: Request) -> str:
 
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
-    route_handlers=[session_id, close_session, DemoHandler, provision, provision_handler, late_bytes],
+    route_handlers=[
+        session_id,
+        close_session,
+        DemoHandler,
+        provision,
+        provision_handler,
+        late_bytes,
+        demodata,
+        list_demos,
+    ],
     on_shutdown=[close_db_connection, close_async_db_connection],
 )
 
 
 def main() -> None:
     """Enter app and setup config."""
-    config = uvicorn.Config("app:app", host="0.0.0.0", log_level="info", workers=6, ws_ping_interval=None)
+    config = uvicorn.Config(
+        "app:app", host="0.0.0.0", log_level="info", workers=6, ws_ping_interval=None, loop="uvloop"
+    )
     server = uvicorn.Server(config)
     server.run()
 
