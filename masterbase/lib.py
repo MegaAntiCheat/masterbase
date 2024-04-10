@@ -320,7 +320,7 @@ def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[
         ORDER BY pageno;
     """
     with engine.connect() as conn:
-        with conn.execution_options(stream_results=True) as stream_conn:
+        with conn.execution_options(stream_results=True, fetch_size=100) as stream_conn:
             result = stream_conn.execute(sa.text(sql), dict(session_id=session_id))
 
             for i, row in enumerate(result):
