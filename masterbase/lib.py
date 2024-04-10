@@ -347,16 +347,16 @@ def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number:
     sql = """
     SELECT
         demo_name, session_id, map, start_time, end_time
-    FROM demo_sessions
+    FROM
+        demo_sessions
     WHERE
-        api_key = :api_key
-        AND active = false
+        active = false
     LIMIT :page_size OFFSET :offset
     ;
     """
 
     with engine.connect() as conn:
-        data = conn.execute(sa.text(sql), {"api_key": api_key, "page_size": page_size, "offset": offset})
+        data = conn.execute(sa.text(sql), {"page_size": page_size, "offset": offset})
 
     return [row._asdict() for row in data.all()]
 
