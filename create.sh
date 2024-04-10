@@ -22,6 +22,7 @@ fi
 if [[ $1 == "--development" || $2 == "--development" ]]; then
     echo "Running in development mode..."
     DEVELOPMENT=true
+    export POSTGRES_HOST=localhost
 fi
 
 pdm sync -G:all
