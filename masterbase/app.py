@@ -251,7 +251,7 @@ class DemoHandler(WebsocketListener):
     def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
         """Close handle on disconnect."""
         session_id = session_id_from_handle(streaming_sessions[socket])
-        logger.info(f"Received disconnect from session ID: {session_id}")
+        logger.info(f"Received socket disconnect from session ID: {session_id}")
         streaming_sessions[socket].close()
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
