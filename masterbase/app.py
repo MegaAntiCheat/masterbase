@@ -36,6 +36,7 @@ from masterbase.lib import (
     session_closed,
     session_id_from_handle,
     start_session_helper,
+    steam_id_from_api_key,
     update_api_key,
 )
 
@@ -91,9 +92,11 @@ async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> No
 async def analyst_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
     """Guard clause to User is an analyst."""
     api_key = connection.query_params["api_key"]
+    engine = connection.app.state.engine
+    steam_id = steam_id_from_api_key(engine, api_key)
 
     async_engine = connection.app.state.async_engine
-    exists = await check_analyst(async_engine, api_key)
+    exists = await check_analyst(async_engine, steam_id)
     if not exists:
         raise NotAuthorizedException()
 
@@ -103,7 +106,9 @@ async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler)
     async_engine = connection.app.state.async_engine
 
     api_key = connection.query_params["api_key"]
-    is_active = await check_is_active(async_engine, api_key)
+    engine = connection.app.state.engine
+    steam_id = steam_id_from_api_key(engine, api_key)
+    is_active = await check_is_active(async_engine, steam_id)
 
     if is_active:
         raise PermissionDeniedException(
@@ -116,7 +121,9 @@ async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHand
     async_engine = connection.app.state.async_engine
 
     api_key = connection.query_params["api_key"]
-    is_active = await check_is_active(async_engine, api_key)
+    engine = connection.app.state.engine
+    steam_id = steam_id_from_api_key(engine, api_key)
+    is_active = await check_is_active(async_engine, steam_id)
     if not is_active:
         raise PermissionDeniedException(detail="User is not in a session, create one at `/session_id`!")
 
@@ -151,7 +158,8 @@ def session_id(
     """
     _session_id = generate_uuid4_int()
     engine = request.app.state.engine
-    start_session_helper(engine, api_key, str(_session_id), demo_name, fake_ip, map)
+    steam_id = steam_id_from_api_key(engine, api_key)
+    start_session_helper(engine, steam_id, str(_session_id), demo_name, fake_ip, map)
 
     return {"session_id": _session_id}
 
@@ -165,7 +173,8 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     """
     engine = request.app.state.engine
 
-    msg = close_session_helper(engine, api_key, streaming_sessions)
+    steam_id = steam_id_from_api_key(engine, api_key)
+    msg = close_session_helper(engine, steam_id, streaming_sessions)
     logger.info(msg)
 
     return {"closed_successfully": True}
@@ -181,7 +190,8 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
     late_bytes = bytes.fromhex(data["late_bytes"])
-    late_bytes_helper(engine, api_key, late_bytes, current_time)
+    steam_id = steam_id_from_api_key(engine, api_key)
+    late_bytes_helper(engine, steam_id, late_bytes, current_time)
 
     return {"late_bytes": True}
 
@@ -227,7 +237,8 @@ class DemoHandler(WebsocketListener):
             logger.info("Invalid API key, closing!")
             await socket.close()
 
-        active = await check_is_active(engine, api_key)
+        steam_id = steam_id_from_api_key(socket.app.state.engine, api_key)
+        active = await check_is_active(engine, steam_id)
         if not active:
             logger.info("User is not in a session, closing!")
             await socket.close()

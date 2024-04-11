@@ -37,15 +37,27 @@ def make_demo_path(session_id: str) -> str:
     return os.path.join(DEMOS_PATH, f"{session_id}.dem")
 
 
-def _get_latest_session_id(engine: Engine, api_key: str) -> str | None:
+def steam_id_from_api_key(engine: Engine, api_key: str) -> str:
+    """Resolve a steam ID from an  API key."""
+    with engine.connect() as conn:
+        steam_id = conn.execute(
+            # should use a CTE here...
+            sa.text("SELECT steam_id from api_keys where api_key = :api_key;"),
+            {"api_key": api_key},
+        ).scalar_one()
+
+    return steam_id
+
+
+def _get_latest_session_id(engine: Engine, steam_id: str) -> str | None:
     """Get the latest session_id for a user."""
     with engine.connect() as conn:
         latest_session_id = conn.execute(
             # should use a CTE here...
             sa.text(
-                "SELECT session_id FROM demo_sessions WHERE start_time = (SELECT MAX(start_time) FROM demo_sessions WHERE api_key = :api_key);"  # noqa
+                "SELECT session_id FROM demo_sessions WHERE start_time = (SELECT MAX(start_time) FROM demo_sessions WHERE steam_id = :steam_id);"  # noqa
             ),
-            {"api_key": api_key},
+            {"steam_id": steam_id},
         ).scalar_one_or_none()
 
     return latest_session_id
@@ -72,10 +84,10 @@ async def check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
         return True
 
 
-async def check_is_active(engine: AsyncEngine, api_key: str) -> bool:
+async def check_is_active(engine: AsyncEngine, steam_id: str) -> bool:
     """Determine if a user is in an active session."""
-    sql = "SELECT * FROM demo_sessions WHERE api_key = :api_key and active = true;"
-    params = {"api_key": api_key}
+    sql = "SELECT * FROM demo_sessions WHERE steam_id = :steam_id and active = true;"
+    params = {"steam_id": steam_id}
 
     async with engine.connect() as conn:
         result = await conn.execute(
@@ -89,20 +101,18 @@ async def check_is_active(engine: AsyncEngine, api_key: str) -> bool:
         return is_active
 
 
-async def check_analyst(engine: AsyncEngine, api_key: str) -> bool:
-    """Determine if a user is in an analyst session."""
+async def check_analyst(engine: AsyncEngine, steam_id: str) -> bool:
+    """Determine if a user is in an analyst."""
     sql = """
         SELECT
             *
         FROM
-            api_keys
-        JOIN
-            analyst_steam_ids ON analyst_steam_ids.steam_id = api_keys.steam_id
+            analyst_steam_ids
         WHERE
-            api_keys.api_key = :api_key
+            steam_id = :steam_id
         ;
     """
-    params = {"api_key": api_key}
+    params = {"steam_id": steam_id}
 
     async with engine.connect() as conn:
         _result = await conn.execute(
@@ -134,15 +144,15 @@ async def session_closed(engine: AsyncEngine, session_id: str) -> bool:
 
 
 def start_session_helper(
-    engine: Engine, api_key: str, session_id: str, demo_name: str, fake_ip: str, map_str: str
+    engine: Engine, steam_id: str, session_id: str, demo_name: str, fake_ip: str, map_str: str
 ) -> None:
     """Start a session and persist to DB."""
     with engine.connect() as conn:
         conn.execute(
             sa.text(
                 """INSERT INTO demo_sessions (
+                    steam_id,
                     session_id,
-                    api_key,
                     demo_name,
                     active,
                     start_time,
@@ -154,8 +164,8 @@ def start_session_helper(
                     created_at,
                     updated_at
                 ) VALUES (
+                    :steam_id,
                     :session_id,
-                    :api_key,
                     :demo_name,
                     :active,
                     :start_time,
@@ -170,8 +180,8 @@ def start_session_helper(
                 """
             ),
             {
+                "steam_id": steam_id,
                 "session_id": session_id,
-                "api_key": api_key,
                 "demo_name": demo_name,
                 "active": True,
                 "start_time": datetime.now().astimezone(timezone.utc).isoformat(),
@@ -187,7 +197,7 @@ def start_session_helper(
         conn.commit()
 
 
-def _close_session_without_demo(engine: Engine, api_key: str, current_time: datetime) -> None:
+def _close_session_without_demo(engine: Engine, steam_id: str, current_time: datetime) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
         conn.execute(
@@ -199,10 +209,10 @@ def _close_session_without_demo(engine: Engine, api_key: str, current_time: date
                 updated_at = :updated_at
                 WHERE
                 active = True AND
-                api_key = :api_key;"""
+                steam_id = :steam_id;"""
             ),
             {
-                "api_key": api_key,
+                "steam_id": steam_id,
                 "end_time": current_time.isoformat(),
                 "updated_at": current_time.isoformat(),
             },
@@ -211,7 +221,7 @@ def _close_session_without_demo(engine: Engine, api_key: str, current_time: date
 
 
 def _close_session_with_demo(
-    engine: Engine, api_key: str, session_id: str, current_time: datetime, demo_path: str
+    engine: Engine, steam_id: str, session_id: str, current_time: datetime, demo_path: str
 ) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
@@ -227,11 +237,11 @@ def _close_session_with_demo(
                 demo_size = :demo_size,
                 updated_at = :updated_at
                 WHERE
-                api_key = :api_key AND
+                steam_id = :steam_id AND
                 session_id = :session_id;"""
             ),
             {
-                "api_key": api_key,
+                "steam_id": steam_id,
                 "session_id": session_id,
                 "end_time": current_time.isoformat(),
                 "updated_at": current_time.isoformat(),
@@ -242,18 +252,18 @@ def _close_session_with_demo(
         conn.commit()
 
 
-def close_session_helper(engine: Engine, api_key: str, streaming_sessions: dict[WebSocket, IO]) -> str:
+def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: dict[WebSocket, IO]) -> str:
     """Properly close a session and return a summary message.
 
     Args:
         engine: Engine for the DB
-        api_key: api key of the user
+        steam_id: steam id of the user
         streaming_sessions: dict of active sessions being streamed to
 
     Returns:
         status message on what happened
     """
-    latest_session_id = _get_latest_session_id(engine, api_key)
+    latest_session_id = _get_latest_session_id(engine, steam_id)
     if latest_session_id is None:
         return "User has never been in a session!"
 
@@ -263,11 +273,11 @@ def close_session_helper(engine: Engine, api_key: str, streaming_sessions: dict[
     current_time = datetime.now().astimezone(timezone.utc)
 
     if latest_session_id is None or not demo_path_exists:
-        _close_session_without_demo(engine, api_key, current_time)
+        _close_session_without_demo(engine, steam_id, current_time)
         msg = "No active session found, closing anyway."
 
     elif latest_session_id is not None and demo_path_exists:
-        _close_session_with_demo(engine, api_key, latest_session_id, current_time, demo_path)
+        _close_session_with_demo(engine, steam_id, latest_session_id, current_time, demo_path)
         os.remove(demo_path)
         msg = "Active session was closed, demo inserted."
 
@@ -289,7 +299,7 @@ def close_session_helper(engine: Engine, api_key: str, streaming_sessions: dict[
     return msg
 
 
-def late_bytes_helper(engine: Engine, api_key: str, late_bytes: bytes, current_time: datetime) -> None:
+def late_bytes_helper(engine: Engine, steam_id: str, late_bytes: bytes, current_time: datetime) -> None:
     """Add late bytes to the DB."""
     with engine.connect() as conn:
         conn.execute(
@@ -299,13 +309,13 @@ def late_bytes_helper(engine: Engine, api_key: str, late_bytes: bytes, current_t
                 late_bytes = :late_bytes,
                 updated_at = :updated_at
                 WHERE
-                api_key = :api_key
+                steam_id = :steam_id
                 AND updated_at = (
-                    SELECT MAX(updated_at) FROM demo_sessions WHERE api_key = :api_key
+                    SELECT MAX(updated_at) FROM demo_sessions WHERE steam_id = :steam_id
                 );"""
             ),
             {
-                "api_key": api_key,
+                "steam_id": steam_id,
                 "late_bytes": late_bytes,
                 "updated_at": current_time.isoformat(),
             },
