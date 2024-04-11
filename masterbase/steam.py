@@ -201,10 +201,7 @@ class Filters:
             return ""
 
         filter_str = ",".join(filters)
-        if filter_str:
-            return f"filter={filter_str}"
-
-        return ""
+        return filter_str
 
     @property
     def filter_string(self) -> str:
@@ -325,7 +322,8 @@ class Query:
         if self.limit is not None:
             params["limit"] = self.limit
 
-        response = requests.get(self.URL, params)
+        full_url = rf"{self.URL}?key={params['key']}&filter={filters.filter_string}"
+        response = requests.get(full_url)
 
         return response.json()["response"]
 

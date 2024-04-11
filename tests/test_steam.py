@@ -84,12 +84,12 @@ def test_coerce_listable(value: list[str] | str | None, expected: list[str] | No
     "kwargs,expected",
     [
         ({}, ""),
-        ({"dedicated": True}, r"filter=\dedicated\1"),
-        ({"dedicated": True, "secure": False, "mapname": "asdf"}, r"filter=\dedicated\1,\secure\0,\map\asdf"),
-        ({"dedicated": True, "gametype": ["foo", "bar"]}, r"filter=\dedicated\1,\gametype\foo,bar"),
+        ({"dedicated": True}, r"\dedicated\1"),
+        ({"dedicated": True, "secure": False, "mapname": "asdf"}, r"\dedicated\1,\secure\0,\map\asdf"),
+        ({"dedicated": True, "gametype": ["foo", "bar"]}, r"\dedicated\1,\gametype\foo,bar"),
         (
             {"dedicated": True, "secure": True, "gametype": ["foo", "bar"]},
-            r"filter=\dedicated\1,\secure\1,\gametype\foo,bar",
+            r"\dedicated\1,\secure\1,\gametype\foo,bar",
         ),
     ],
 )
