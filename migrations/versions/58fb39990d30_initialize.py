@@ -23,9 +23,10 @@ def upgrade() -> None:
         """
         CREATE TABLE api_keys (
             steam_id varchar,
-            api_key varchar PRIMARY KEY,
+            api_key varchar,
             created_at timestamptz,
-            updated_at timestamptz
+            updated_at timestamptz,
+            PRIMARY KEY (steam_id)
         );
         """
     )
@@ -33,8 +34,8 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE TABLE demo_sessions (
+            steam_id varchar REFERENCES api_keys,
             session_id varchar,
-            api_key varchar REFERENCES api_keys ON UPDATE CASCADE,
             demo_name varchar,
             active boolean,
             start_time timestamptz,
@@ -48,7 +49,7 @@ def upgrade() -> None:
             late_bytes bytea,
             created_at timestamptz,
             updated_at timestamptz,
-            PRIMARY KEY (session_id, api_key)
+            PRIMARY KEY (session_id)
         );
         """
     )
@@ -73,7 +74,9 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute(
         """
-        DROP TABLE api_keys;
         DROP TABLE demo_sessions;
+        DROP TABLE api_keys;
+        DROP TABLE beta_tester_steam_ids;
+        DROP TABLE analyst_steam_ids;
         """
     )
