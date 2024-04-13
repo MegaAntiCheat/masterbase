@@ -25,6 +25,7 @@ from masterbase.lib import (
     check_steam_id_is_beta_tester,
     close_session_helper,
     demodata_helper,
+    generate_api_key,
     generate_uuid4_int,
     get_demo_size,
     is_limited_account,
@@ -362,7 +363,7 @@ def provision_handler(request: Request) -> str:
             return "<span>You aren't a beta tester! Sorry!</span>"
 
         api_key = check_steam_id_has_api_key(engine, steam_id)
-        new_api_key = str(generate_uuid4_int())
+        new_api_key = generate_api_key()
         invalidated_text = ""
         if api_key is not None:
             # invalidate old API key and provision a new one
