@@ -2,6 +2,7 @@
 
 import logging
 import os
+import secrets
 from datetime import datetime, timezone
 from typing import IO, Any, Generator
 from uuid import uuid4
@@ -66,6 +67,11 @@ def _get_latest_session_id(engine: Engine, steam_id: str) -> str | None:
 def generate_uuid4_int() -> int:
     """Seems useless, but makes testing easier."""
     return uuid4().int
+
+
+def generate_api_key() -> str:
+    """Generate an API key."""
+    return f"MB-{secrets.token_urlsafe(32)}"
 
 
 def session_id_from_handle(handle: IO) -> str:
