@@ -37,6 +37,7 @@ from masterbase.lib import (
     provision_api_key,
     session_closed,
     session_id_from_handle,
+    set_open_true,
     start_session_helper,
     steam_id_from_api_key,
     update_api_key,
@@ -249,6 +250,8 @@ class DemoHandler(WebsocketListener):
         if session_open:
             logger.info("User is already streaming data, closing!")
             await socket.close()
+
+        await set_open_true(socket.app.state.engine, steam_id, session_id)
 
         path = make_demo_path(session_id)
 
