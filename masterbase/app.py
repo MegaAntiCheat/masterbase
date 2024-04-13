@@ -14,13 +14,13 @@ from litestar.exceptions import NotAuthorizedException, PermissionDeniedExceptio
 from litestar.handlers import WebsocketListener
 from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect, Stream
-from litestar.stores.memory import MemoryStore
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.lib import (
     check_analyst,
     check_is_active,
+    check_is_open,
     check_key_exists,
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 
 # use this to ensure client only has one open connection
-streaming_sessions: dict[WebSocket, IO] = MemoryStore()
+streaming_sessions: dict[WebSocket, IO] = {}
 
 
 def get_db_connection(app: Litestar) -> Engine:
@@ -245,8 +245,9 @@ class DemoHandler(WebsocketListener):
             logger.info("User is not in a session, closing!")
             await socket.close()
 
-        if session_id in streaming_sessions:
-            logger.info("User is already streaming!")
+        session_open = await check_is_open(socket.app.state.engine, steam_id, session_id)
+        if session_open:
+            logger.info("User is already streaming data, closing!")
             await socket.close()
 
         path = make_demo_path(session_id)

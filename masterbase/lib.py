@@ -110,6 +110,23 @@ async def check_is_active(engine: AsyncEngine, steam_id: str) -> bool:
         return is_active
 
 
+async def check_is_open(engine: AsyncEngine, steam_id: str, session_id: str) -> bool:
+    """Determine if a user is in an active session."""
+    sql = "SELECT open FROM demo_sessions WHERE steam_id = :steam_id and session_id = :session_id;"
+    params = {"steam_id": steam_id, "session_id": session_id}
+
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            sa.text(sql),
+            params,
+        )
+
+        data = result.one()
+        is_open = bool(data)
+
+        return is_open
+
+
 async def check_analyst(engine: AsyncEngine, steam_id: str) -> bool:
     """Determine if a user is in an analyst."""
     sql = """
@@ -164,6 +181,7 @@ def start_session_helper(
                     session_id,
                     demo_name,
                     active,
+                    open,
                     start_time,
                     end_time,
                     fake_ip,
@@ -177,6 +195,7 @@ def start_session_helper(
                     :session_id,
                     :demo_name,
                     :active,
+                    :open,
                     :start_time,
                     :end_time,
                     :fake_ip,
@@ -193,6 +212,7 @@ def start_session_helper(
                 "session_id": session_id,
                 "demo_name": demo_name,
                 "active": True,
+                "open": False,
                 "start_time": datetime.now().astimezone(timezone.utc).isoformat(),
                 "end_time": None,
                 "fake_ip": fake_ip,
@@ -214,6 +234,7 @@ def _close_session_without_demo(engine: Engine, steam_id: str, current_time: dat
                 """UPDATE demo_sessions
                 SET
                 active = False,
+                open = False,
                 end_time = :end_time,
                 updated_at = :updated_at
                 WHERE
@@ -241,6 +262,7 @@ def _close_session_with_demo(
                 """UPDATE demo_sessions
                 SET
                 active = False,
+                open = False,
                 end_time = :end_time,
                 demo_oid = :demo_oid,
                 demo_size = :demo_size,
