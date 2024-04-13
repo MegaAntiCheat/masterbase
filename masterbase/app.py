@@ -14,6 +14,7 @@ from litestar.exceptions import NotAuthorizedException, PermissionDeniedExceptio
 from litestar.handlers import WebsocketListener
 from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect, Stream
+from litestar.stores.memory import MemoryStore
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -45,7 +46,7 @@ logger = logging.getLogger(__name__)
 
 
 # use this to ensure client only has one open connection
-streaming_sessions: dict[WebSocket, IO] = {}
+streaming_sessions: dict[WebSocket, IO] = MemoryStore()
 
 
 def get_db_connection(app: Litestar) -> Engine:
