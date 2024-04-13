@@ -19,6 +19,9 @@ logger = logging.getLogger(__name__)
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
 
+LATE_BYTES_START = 0x420
+LATE_BYTES_end = 0x430
+
 
 def make_db_uri(is_async: bool = False) -> str:
     """Correctly make the database URi."""
@@ -362,7 +365,7 @@ def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[
                         yield bytestream
                     else:
                         # bytesurgeon >:D
-                        bytestream = bytestream[:0x420] + late_bytes + bytestream[0x430:]
+                        bytestream = bytestream[:LATE_BYTES_START] + late_bytes + bytestream[LATE_BYTES_end:]
                         yield bytestream
                 else:
                     yield bytestream
