@@ -18,8 +18,10 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.lib import (
+    async_steam_id_from_api_key,
     check_analyst,
     check_is_active,
+    check_is_open,
     check_key_exists,
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
@@ -36,6 +38,8 @@ from masterbase.lib import (
     provision_api_key,
     session_closed,
     session_id_from_handle,
+    set_open_false,
+    set_open_true,
     start_session_helper,
     steam_id_from_api_key,
     update_api_key,
@@ -238,15 +242,18 @@ class DemoHandler(WebsocketListener):
             logger.info("Invalid API key, closing!")
             await socket.close()
 
-        steam_id = steam_id_from_api_key(socket.app.state.engine, api_key)
+        steam_id = await async_steam_id_from_api_key(engine, api_key)
         active = await check_is_active(engine, steam_id)
         if not active:
             logger.info("User is not in a session, closing!")
             await socket.close()
 
-        if session_id in streaming_sessions:
-            logger.info("User is already streaming!")
+        session_open = await check_is_open(engine, steam_id, session_id)
+        if session_open:
+            logger.info("User is already streaming data, closing!")
             await socket.close()
+
+        await set_open_true(engine, steam_id, session_id)
 
         path = make_demo_path(session_id)
 
@@ -260,11 +267,13 @@ class DemoHandler(WebsocketListener):
 
         streaming_sessions[socket] = open(path, mode)
 
-    def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
+    async def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
         """Close handle on disconnect."""
         session_id = session_id_from_handle(streaming_sessions[socket])
         logger.info(f"Received socket disconnect from session ID: {session_id}")
         streaming_sessions[socket].close()
+        streaming_sessions.pop(socket)
+        await set_open_false(socket.app.state.async_engine, session_id)
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
         """Write data on disconnect."""
@@ -373,7 +382,7 @@ def provision_handler(request: Request) -> str:
         else:
             provision_api_key(engine, steam_id, new_api_key)
 
-        text = f"Successfully authenticated! Your API key is {new_api_key}! {invalidated_text} Do not lose this as the client needs it!"  # noqa
+        text = f"Successfully authenticated! Your API key is '{new_api_key}' {invalidated_text} Do not lose this as the client needs it!"  # noqa
 
     return f"""
         <html>

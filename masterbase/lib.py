@@ -53,6 +53,19 @@ def steam_id_from_api_key(engine: Engine, api_key: str) -> str:
     return steam_id
 
 
+async def async_steam_id_from_api_key(engine: AsyncEngine, api_key: str) -> str:
+    """Resolve a steam ID from an  API key."""
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            # should use a CTE here...
+            sa.text("SELECT steam_id from api_keys where api_key = :api_key;"),
+            {"api_key": api_key},
+        )
+        steam_id = result.scalar_one()
+
+    return steam_id
+
+
 def _get_latest_session_id(engine: Engine, steam_id: str) -> str | None:
     """Get the latest session_id for a user."""
     with engine.connect() as conn:
@@ -110,6 +123,49 @@ async def check_is_active(engine: AsyncEngine, steam_id: str) -> bool:
         return is_active
 
 
+async def check_is_open(engine: AsyncEngine, steam_id: str, session_id: str) -> bool:
+    """Determine if a user is streaming data."""
+    sql = "SELECT open FROM demo_sessions WHERE steam_id = :steam_id and session_id = :session_id;"
+    params = {"steam_id": steam_id, "session_id": session_id}
+
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            sa.text(sql),
+            params,
+        )
+
+        data = result.scalar_one_or_none()
+        is_open = bool(data)
+
+        return is_open
+
+
+async def set_open_true(engine: AsyncEngine, steam_id: str, session_id: str) -> None:
+    """Set `open` to true, indicating the user is streaming data."""
+    sql = "UPDATE demo_sessions SET open = true WHERE steam_id = :steam_id and session_id = :session_id;"
+    params = {"steam_id": steam_id, "session_id": session_id}
+
+    async with engine.connect() as conn:
+        await conn.execute(
+            sa.text(sql),
+            params,
+        )
+        await conn.commit()
+
+
+async def set_open_false(engine: AsyncEngine, session_id: str) -> None:
+    """Set `open` to false, indicating the user not streaming data."""
+    sql = "UPDATE demo_sessions SET open = false WHERE session_id = :session_id;"
+    params = {"session_id": session_id}
+
+    async with engine.connect() as conn:
+        await conn.execute(
+            sa.text(sql),
+            params,
+        )
+        await conn.commit()
+
+
 async def check_analyst(engine: AsyncEngine, steam_id: str) -> bool:
     """Determine if a user is in an analyst."""
     sql = """
@@ -164,6 +220,7 @@ def start_session_helper(
                     session_id,
                     demo_name,
                     active,
+                    open,
                     start_time,
                     end_time,
                     fake_ip,
@@ -177,6 +234,7 @@ def start_session_helper(
                     :session_id,
                     :demo_name,
                     :active,
+                    :open,
                     :start_time,
                     :end_time,
                     :fake_ip,
@@ -193,6 +251,7 @@ def start_session_helper(
                 "session_id": session_id,
                 "demo_name": demo_name,
                 "active": True,
+                "open": False,
                 "start_time": datetime.now().astimezone(timezone.utc).isoformat(),
                 "end_time": None,
                 "fake_ip": fake_ip,
@@ -214,6 +273,7 @@ def _close_session_without_demo(engine: Engine, steam_id: str, current_time: dat
                 """UPDATE demo_sessions
                 SET
                 active = False,
+                open = False,
                 end_time = :end_time,
                 updated_at = :updated_at
                 WHERE
@@ -241,6 +301,7 @@ def _close_session_with_demo(
                 """UPDATE demo_sessions
                 SET
                 active = False,
+                open = False,
                 end_time = :end_time,
                 demo_oid = :demo_oid,
                 demo_size = :demo_size,

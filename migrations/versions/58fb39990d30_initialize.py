@@ -38,6 +38,7 @@ def upgrade() -> None:
             session_id varchar,
             demo_name varchar,
             active boolean,
+            open boolean,
             start_time timestamptz,
             end_time timestamptz,
             fake_ip varchar,
