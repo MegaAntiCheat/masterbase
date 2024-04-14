@@ -272,6 +272,7 @@ class DemoHandler(WebsocketListener):
         session_id = session_id_from_handle(streaming_sessions[socket])
         logger.info(f"Received socket disconnect from session ID: {session_id}")
         streaming_sessions[socket].close()
+        streaming_sessions.pop(socket)
         await set_open_false(socket.app.state.async_engine, session_id)
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
