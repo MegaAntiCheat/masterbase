@@ -134,7 +134,7 @@ async def check_is_open(engine: AsyncEngine, steam_id: str, session_id: str) -> 
             params,
         )
 
-        data = result.one_or_none()
+        data = result.scalar_one_or_none()
         is_open = bool(data)
 
         return is_open
@@ -144,6 +144,19 @@ async def set_open_true(engine: AsyncEngine, steam_id: str, session_id: str) -> 
     """Set `open` to true, indicating the user is streaming data."""
     sql = "UPDATE demo_sessions SET open = true WHERE steam_id = :steam_id and session_id = :session_id;"
     params = {"steam_id": steam_id, "session_id": session_id}
+
+    async with engine.connect() as conn:
+        await conn.execute(
+            sa.text(sql),
+            params,
+        )
+        await conn.commit()
+
+
+async def set_open_false(engine: AsyncEngine, session_id: str) -> None:
+    """Set `open` to false, indicating the user not streaming data."""
+    sql = "UPDATE demo_sessions SET open = false WHERE session_id = :session_id;"
+    params = {"session_id": session_id}
 
     async with engine.connect() as conn:
         await conn.execute(

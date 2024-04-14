@@ -38,6 +38,7 @@ from masterbase.lib import (
     provision_api_key,
     session_closed,
     session_id_from_handle,
+    set_open_false,
     set_open_true,
     start_session_helper,
     steam_id_from_api_key,
@@ -266,11 +267,12 @@ class DemoHandler(WebsocketListener):
 
         streaming_sessions[socket] = open(path, mode)
 
-    def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
+    async def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
         """Close handle on disconnect."""
         session_id = session_id_from_handle(streaming_sessions[socket])
         logger.info(f"Received socket disconnect from session ID: {session_id}")
         streaming_sessions[socket].close()
+        await set_open_false(socket.app.state.async_engine, session_id)
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
         """Write data on disconnect."""
