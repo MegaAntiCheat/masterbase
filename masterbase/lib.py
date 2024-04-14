@@ -53,6 +53,19 @@ def steam_id_from_api_key(engine: Engine, api_key: str) -> str:
     return steam_id
 
 
+async def async_steam_id_from_api_key(engine: AsyncEngine, api_key: str) -> str:
+    """Resolve a steam ID from an  API key."""
+    async with engine.connect() as conn:
+        result = await conn.execute(
+            # should use a CTE here...
+            sa.text("SELECT steam_id from api_keys where api_key = :api_key;"),
+            {"api_key": api_key},
+        )
+        steam_id = result.scalar_one()
+
+    return steam_id
+
+
 def _get_latest_session_id(engine: Engine, steam_id: str) -> str | None:
     """Get the latest session_id for a user."""
     with engine.connect() as conn:
@@ -121,7 +134,7 @@ async def check_is_open(engine: AsyncEngine, steam_id: str, session_id: str) -> 
             params,
         )
 
-        data = result.one()
+        data = result.one_or_none()
         is_open = bool(data)
 
         return is_open

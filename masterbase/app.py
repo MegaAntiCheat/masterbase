@@ -18,6 +18,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.lib import (
+    async_steam_id_from_api_key,
     check_analyst,
     check_is_active,
     check_is_open,
@@ -240,18 +241,18 @@ class DemoHandler(WebsocketListener):
             logger.info("Invalid API key, closing!")
             await socket.close()
 
-        steam_id = steam_id_from_api_key(socket.app.state.engine, api_key)
+        steam_id = await async_steam_id_from_api_key(engine, api_key)
         active = await check_is_active(engine, steam_id)
         if not active:
             logger.info("User is not in a session, closing!")
             await socket.close()
 
-        session_open = await check_is_open(socket.app.state.engine, steam_id, session_id)
+        session_open = await check_is_open(engine, steam_id, session_id)
         if session_open:
             logger.info("User is already streaming data, closing!")
             await socket.close()
 
-        await set_open_true(socket.app.state.engine, steam_id, session_id)
+        await set_open_true(engine, steam_id, session_id)
 
         path = make_demo_path(session_id)
 
@@ -378,7 +379,7 @@ def provision_handler(request: Request) -> str:
         else:
             provision_api_key(engine, steam_id, new_api_key)
 
-        text = f"Successfully authenticated! Your API key is {new_api_key}! {invalidated_text} Do not lose this as the client needs it!"  # noqa
+        text = f"Successfully authenticated! Your API key is '{new_api_key}' {invalidated_text} Do not lose this as the client needs it!"  # noqa
 
     return f"""
         <html>
