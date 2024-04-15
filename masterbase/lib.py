@@ -6,9 +6,7 @@ import secrets
 from datetime import datetime, timezone
 from typing import IO, Any, Generator
 from uuid import uuid4
-from xml.etree import ElementTree
 
-import requests
 import sqlalchemy as sa
 from litestar import WebSocket
 from sqlalchemy import Engine
@@ -500,13 +498,31 @@ def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
         conn.commit()
 
 
-def is_limited_account(steam_id: str) -> bool:
-    """Check if the account is limited or not."""
-    response = requests.get(f"https://steamcommunity.com/profiles/{steam_id}?xml=1")
-    tree = ElementTree.fromstring(response.content)
-    for element in tree:
-        if element.tag == "isLimitedAccount":
-            limited = bool(int(str(element.text)))
-            return limited
+def add_loser(engine: Engine, steam_id: str) -> None:
+    """Determine if we have flagged account as a loser."""
+    with engine.connect() as conn:
+        created_at = datetime.now().astimezone(timezone.utc).isoformat()
+        updated_at = created_at
+        conn.execute(
+            sa.text(
+                """INSERT INTO losers (
+                    steam_id, created_at, updated_at
+                    ) VALUES (
+                        :steam_id, :created_at, :updated_at);"""
+            ),
+            {"steam_id": steam_id, "created_at": created_at, "updated_at": updated_at},
+        )
+        conn.commit()
 
-    raise ValueError(f"Could not determine if {steam_id} is limited!")
+
+def check_is_loser(engine: Engine, steam_id: str) -> bool:
+    """Determine if we have flagged account as a loser."""
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text("SELECT COUNT(*) FROM losers WHERE steam_id = :steam_id"),
+            {
+                "steam_id": steam_id,
+            },
+        ).scalar_one_or_none()
+
+        return bool(result)

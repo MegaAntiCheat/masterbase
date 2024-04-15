@@ -18,9 +18,11 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.lib import (
+    add_loser,
     async_steam_id_from_api_key,
     check_analyst,
     check_is_active,
+    check_is_loser,
     check_is_open,
     check_key_exists,
     check_steam_id_has_api_key,
@@ -30,7 +32,6 @@ from masterbase.lib import (
     generate_api_key,
     generate_uuid4_int,
     get_demo_size,
-    is_limited_account,
     late_bytes_helper,
     list_demos_helper,
     make_db_uri,
@@ -44,6 +45,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
+from masterbase.steam import is_limited_account
 
 logger = logging.getLogger(__name__)
 
@@ -360,12 +362,21 @@ def provision_handler(request: Request) -> str:
         # if it is not in the DB or say that it already exists, and if they forgot it to let an admin know...
         # admin will then delete the steam ID of the user in the DB and a new sign in will work.
         steam_id = os.path.split(data["openid.claimed_id"])[-1]
+        engine = app.state.engine
         # block limited accounts...
-        limited = is_limited_account(steam_id)
-        if limited:
+
+        # if we have seen this steam id before...
+        loser = check_is_loser(engine, steam_id)
+        print(loser, steam_id)
+        if loser:
             return "limited"
 
-        engine = app.state.engine
+        # if we have not seen this steam id before
+        limited = is_limited_account(steam_id)
+        if limited:
+            add_loser(app.state.engine, steam_id)
+            return "limited"
+
         is_beta_tester = check_steam_id_is_beta_tester(engine, steam_id)
 
         if not is_beta_tester:
