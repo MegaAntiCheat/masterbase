@@ -1,11 +1,16 @@
 #!/bin/bash
 
-export STEAM_API_KEY=no
 export POSTGRES_USER=MEGASCATTERBOMB
 export POSTGRES_PASSWORD=masterbase
 export POSTGRES_HOST=172.20.1.10
 export POSTGRES_PORT=5432
 export API_HOST=172.20.1.20
+
+
+if [ -z "${STEAM_API_KEY}" ]; then
+    echo "Error: STEAM_API_KEY variable is not set."
+    exit 1
+fi
 
 
 if [[ $1 == "--replace" || $2 == "--replace" ]]; then
@@ -30,5 +35,5 @@ docker build -f Dockerfile.db . -t db-dev
 docker create --name masterbase-db-dev --network masterbase-network-dev --ip $POSTGRES_HOST -p 8050:5432 -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_DB=demos -t db-dev
 docker start masterbase-db-dev
 docker build -f Dockerfile.api . --build-arg DEVELOPMENT=$DEVELOPMENT -t api-dev
-docker create --name masterbase-api-dev --network masterbase-network-dev --ip $API_HOST -p 8000:8000 -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_HOST=$POSTGRES_HOST -e POSTGRES_PORT=$POSTGRES_PORT -t api-dev
+docker create --name masterbase-api-dev --network masterbase-network-dev --ip $API_HOST -p 8000:8000 -e STEAM_API_KEY=$STEAM_API_KEY -e POSTGRES_USER=$POSTGRES_USER -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD -e POSTGRES_HOST=$POSTGRES_HOST -e POSTGRES_PORT=$POSTGRES_PORT -t api-dev
 docker start masterbase-api-dev
