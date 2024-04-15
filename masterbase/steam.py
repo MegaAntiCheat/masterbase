@@ -11,7 +11,7 @@ from pydantic import BaseModel
 STEAM_API_KEY_KEYNAME = "STEAM_API_KEY"
 
 
-def get_steam_api_key(path_or_env_var_name: str) -> str:
+def get_steam_api_key(path_or_env_var_name: str | None = STEAM_API_KEY_KEYNAME) -> str:
     """Get a steam API key from a toml, json, or environment variable.
 
     Expects key to be "STEAM_API_KEY".
@@ -22,6 +22,8 @@ def get_steam_api_key(path_or_env_var_name: str) -> str:
     Returns:
         steam api key
     """
+    if path_or_env_var_name is None:
+        path_or_env_var_name = STEAM_API_KEY_KEYNAME
     try:
         # attempt to load from json or toml file
         if os.path.isfile(path_or_env_var_name):
@@ -337,3 +339,14 @@ class Query:
         servers = [Server(**server) for server in response["servers"]]
 
         return servers
+
+
+def is_limited_account(steam_id: str) -> bool:
+    """Determine if an account is limited or not."""
+    url = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2"
+    params = {"key": get_steam_api_key(), "steamids": steam_id}
+    response = requests.get(url, params).json()
+    player_data = response["response"]["players"][0]
+    limited = not bool(player_data.get("profilestate", False))
+
+    return limited

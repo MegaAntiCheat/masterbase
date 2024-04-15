@@ -33,6 +33,17 @@ def upgrade() -> None:
 
     op.execute(
         """
+        CREATE TABLE losers (
+            steam_id varchar,
+            created_at timestamptz,
+            updated_at timestamptz,
+            PRIMARY KEY (steam_id)
+        );
+        """
+    )
+
+    op.execute(
+        """
         CREATE TABLE demo_sessions (
             steam_id varchar REFERENCES api_keys,
             session_id varchar,
