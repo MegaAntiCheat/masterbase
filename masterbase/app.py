@@ -367,7 +367,6 @@ def provision_handler(request: Request) -> str:
 
         # if we have seen this steam id before...
         loser = check_is_loser(engine, steam_id)
-        print(loser, steam_id)
         if loser:
             return "limited"
 
