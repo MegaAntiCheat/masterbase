@@ -308,7 +308,7 @@ def provision(request: Request) -> Redirect:
 
 
 @get("/provision_handler", media_type=MediaType.HTML, sync_to_thread=True)
-def provision_handler(request: Request) -> str:
+def provision_handler(request: Request) -> str | Redirect:
     """Handle a response from Steam.
 
     Mostly stolen from https://github.com/TeddiO/pySteamSignIn/blob/master/pysteamsignin/steamsignin.py
@@ -374,16 +374,8 @@ def provision_handler(request: Request) -> str:
 
         text = f"Successfully authenticated! Your API key is {new_api_key}! {invalidated_text} Do not lose this as the client needs it!"  # noqa
 
-    return f"""
-        <html>
-            <body>
-                <div>
-                    <span>{text}</span>
-                </div>
-            </body>
-        </html>
-        """
-
+        return Redirect(path=f"http://localhost:8080/?key={new_api_key}", status_code=303)
+    return text
 
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
