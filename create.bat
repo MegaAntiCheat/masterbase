@@ -26,7 +26,11 @@ if "%~1"=="--development" (
     set "DEVELOPMENT=true"
 )
 
-:: Run other commands (pdm sync, docker network, etc.)
-:: Note: You'll need to adapt these commands to Windows equivalents.
 pdm sync -G:all
+docker network create --driver bridge masterbase-network-dev --subnet=%API_HOST%/16
+docker build -f Dockerfile.db . -t db-dev
+docker create --name masterbase-db-dev --network masterbase-network-dev --ip %POSTGRES_HOST% -p 8050:%POSTGRES_PORT% -e POSTGRES_USER=%POSTGRES_USER% -e POSTGRES_PASSWORD=%POSTGRES_PASSWORD% -e POSTGRES_DB=demos -t db-dev
+docker start masterbase-db-dev
+docker build -f Dockerfile.api . --build-arg DEVELOPMENT=true -t api-dev
+docker create --name masterbase-api-dev --network masterbase-network-dev --ip %API_HOST% -p 8000:8000 -e POSTGRES_USER=%POSTGRES_USER% -e POSTGRES_PASSWORD=%POSTGRES_PASSWORD% -e POSTGRES_HOST=%POSTGRES_HOST% -e POSTGRES_PORT=%POSTGRES_PORT% -t api-dev
 docker start masterbase-api-dev
