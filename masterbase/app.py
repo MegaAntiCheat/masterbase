@@ -47,6 +47,12 @@ logger = logging.getLogger(__name__)
 streaming_sessions: dict[WebSocket, IO] = {}
 
 
+@get('/', sync_to_thread=False)
+def status(request: Request) -> str:
+    """Return the status of the application."""
+    return "OK"
+
+
 def get_db_connection(app: Litestar) -> Engine:
     """Get the db engine.
 
@@ -380,6 +386,7 @@ def provision_handler(request: Request) -> str | Redirect:
 app = Litestar(
     on_startup=[get_db_connection, get_async_db_connection],
     route_handlers=[
+        status,
         session_id,
         close_session,
         DemoHandler,
