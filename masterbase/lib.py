@@ -1,5 +1,6 @@
 """Library code for application."""
 
+import hashlib
 import logging
 import os
 import secrets
@@ -436,7 +437,7 @@ def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number:
 
     sql = """
     SELECT
-        demo_name, session_id, map, start_time, end_time, demo_size
+        steam_id, demo_name, session_id, map, start_time, end_time, demo_size
     FROM
         demo_sessions
     WHERE
@@ -448,7 +449,16 @@ def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number:
     with engine.connect() as conn:
         data = conn.execute(sa.text(sql), {"page_size": page_size, "offset": offset})
 
-    return [row._asdict() for row in data.all()]
+    rows = [row._asdict() for row in data.all()]
+    requester_steam_id = steam_id_from_api_key(engine, api_key)
+    # modify in place
+    for row in rows:
+        demo_steam_id = row["steam_id"]
+        to_hash = f"{demo_steam_id}{requester_steam_id}"
+        row["anonymous_id"] = hashlib.sha256(to_hash.encode()).hexdigest()
+        row.pop("steam_id")
+
+    return rows
 
 
 def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
