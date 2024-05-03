@@ -5,7 +5,7 @@ import logging
 import os
 import secrets
 from datetime import datetime, timezone
-from typing import IO, Any, Generator
+from typing import IO, Any, AsyncGenerator
 from uuid import uuid4
 
 import sqlalchemy as sa
@@ -392,16 +392,17 @@ def late_bytes_helper(engine: Engine, steam_id: str, late_bytes: bytes, current_
         conn.commit()
 
 
-def get_demo_size(engine: Engine, session_id: str) -> str:
+async def get_demo_size(engine: AsyncEngine, session_id: str) -> str:
     """Get the size of a demo."""
     sql = "SELECT demo_size FROM demo_sessions WHERE session_id = :session_id;"
-    with engine.connect() as conn:
-        size = conn.execute(sa.text(sql), dict(session_id=session_id)).scalar_one()
+    async with engine.connect() as conn:
+        result = await conn.execute(sa.text(sql), dict(session_id=session_id))
+        size = result.scalar_one()
 
         return str(size)
 
 
-def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[bytes, None, None]:
+async def demodata_helper(engine: AsyncEngine, api_key: str, session_id: str) -> AsyncGenerator[bytes, None]:
     """Yield demo data page by page."""
     sql = """
         SELECT pageno, data
@@ -410,25 +411,31 @@ def demodata_helper(engine: Engine, api_key: str, session_id: str) -> Generator[
         WHERE demo.session_id = :session_id
         ORDER BY pageno;
     """
-    with engine.connect() as conn:
-        with conn.execution_options(stream_results=True, fetch_size=100) as stream_conn:
-            result = stream_conn.execute(sa.text(sql), dict(session_id=session_id))
+    async with engine.connect() as conn:
+        result = await conn.stream(sa.text(sql), dict(session_id=session_id))
 
-            for i, row in enumerate(result):
-                # probably not the best check but always here...
-                bytestream = row[1].tobytes()
-                if i == 0:
-                    sql = "SELECT late_bytes from demo_sessions where session_id = :session_id;"
-                    late_bytes = conn.execute(sa.text(sql), dict(session_id=session_id)).scalar_one()
-                    if late_bytes is None:
-                        logger.info(f"Session {session_id} has no late_bytes!")
-                        yield bytestream
-                    else:
-                        # bytesurgeon >:D
-                        bytestream = bytestream[:LATE_BYTES_START] + late_bytes + bytestream[LATE_BYTES_end:]
-                        yield bytestream
-                else:
+        first = True
+        while True:
+            row = await result.fetchone()
+            if row is None:
+                break
+
+            bytestream = row[1]
+
+            if first:
+                sql = "SELECT late_bytes from demo_sessions where session_id = :session_id;"
+                _late_bytes = await conn.execute(sa.text(sql), dict(session_id=session_id))
+                late_bytes = _late_bytes.scalar_one_or_none()
+                if late_bytes is None:
+                    logger.info(f"Session {session_id} has no late_bytes!")
                     yield bytestream
+                else:
+                    # bytesurgeon >:D
+                    bytestream = bytestream[:LATE_BYTES_START] + late_bytes + bytestream[LATE_BYTES_end:]
+                    yield bytestream
+                first = False
+            else:
+                yield bytestream
 
 
 def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number: int) -> list[dict[str, Any]]:

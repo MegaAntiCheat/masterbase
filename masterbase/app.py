@@ -217,11 +217,11 @@ def list_demos(
     return demos
 
 
-@get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard], sync_to_thread=False)
-def demodata(request: Request, api_key: str, session_id: str) -> Stream:
+@get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard])
+async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
-    engine = request.app.state.engine
-    size = get_demo_size(engine, session_id)
+    engine = request.app.state.async_engine
+    size = await get_demo_size(engine, session_id)
     bytestream_generator = demodata_helper(engine, api_key, session_id)
     headers = {
         "Content-Disposition": f'attachment; filename="{session_id}.dem"',
