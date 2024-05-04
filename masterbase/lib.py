@@ -402,17 +402,29 @@ async def get_demo_size(engine: AsyncEngine, session_id: str) -> str:
         return str(size)
 
 
-async def demodata_helper(engine: AsyncEngine, api_key: str, session_id: str) -> AsyncGenerator[bytes, None]:
+async def get_demo_oid(engine: AsyncEngine, session_id: str) -> int:
+    """Return the OID for a session."""
+    sql = """
+        SELECT demo_oid FROM demo_sessions WHERE session_id = :session_id;
+    """
+    async with engine.connect() as conn:
+        result = await conn.execute(sa.text(sql), dict(session_id=session_id))
+        demo_oid = result.scalar_one()
+
+        return int(demo_oid)
+
+
+async def demodata_helper(engine: AsyncEngine, session_id: str) -> AsyncGenerator[bytes, None]:
     """Yield demo data page by page."""
+    demo_oid = await get_demo_oid(engine, session_id)
     sql = """
         SELECT pageno, data
         FROM pg_largeobject
-        JOIN demo_sessions demo ON demo.demo_oid = pg_largeobject.loid
-        WHERE demo.session_id = :session_id
+        WHERE loid = :demo_oid
         ORDER BY pageno;
     """
     async with engine.connect() as conn:
-        result = await conn.stream(sa.text(sql), dict(session_id=session_id))
+        result = await conn.stream(sa.text(sql), dict(demo_oid=demo_oid))
 
         first = True
         while True:
