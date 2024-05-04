@@ -19,7 +19,7 @@ DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
 os.makedirs(DEMOS_PATH, exist_ok=True)
 
 LATE_BYTES_START = 0x420
-LATE_BYTES_end = 0x430
+LATE_BYTES_END = 0x430
 
 
 def make_db_uri(is_async: bool = False) -> str:
@@ -431,7 +431,7 @@ async def demodata_helper(engine: AsyncEngine, api_key: str, session_id: str) ->
                     yield bytestream
                 else:
                     # bytesurgeon >:D
-                    bytestream = bytestream[:LATE_BYTES_START] + late_bytes + bytestream[LATE_BYTES_end:]
+                    bytestream = bytestream[:LATE_BYTES_START] + late_bytes + bytestream[LATE_BYTES_END:]
                     yield bytestream
                 first = False
             else:
