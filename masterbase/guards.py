@@ -64,3 +64,7 @@ async def session_closed_guard(connection: ASGIConnection, _: BaseRouteHandler) 
     closed = await session_closed(async_engine, session_id)
     if not closed:
         raise PermissionDeniedException(detail="Session is still active, cannot retrieve data!")
+
+
+async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+    """Validate session data is from a server we can check exists."""
