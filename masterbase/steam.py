@@ -219,6 +219,20 @@ class Filters:
         raise NotImplementedError
 
 
+def get_fake_ip(ip: str) -> str:
+    """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
+    ip_parts = [int(part) for part in ip.split(".")]
+    return (ip_parts[0] * 256**3) + (ip_parts[1] * 256**2) + (ip_parts[2] * 256) + ip_parts[3]
+
+
+QUERY_TYPES: dict[int, str] = {
+    1: "ping_data",
+    2: "players_data",
+    3: "rules_data",
+}
+URL: str = "https://api.steampowered.com/IGameServersService/QueryByFakeIP/v1/"
+
+
 class Server(BaseModel):
     """Represent a server response from https://api.steampowered.com/IGameServersService/GetServerList/v1."""
 
@@ -240,18 +254,11 @@ class Server(BaseModel):
     os: str
     gametype: str
 
-    URL: str = "https://api.steampowered.com/IGameServersService/QueryByFakeIP/v1/"
-
     # four query types -- https://developer.valvesoftware.com/wiki/Source_RCON_Protocol
     # 0 is nothing
     # 1 is SDR backed attrs lik above
     # 2 is player data
     # 3 is game rules
-    QUERY_TYPES: dict[int, str] = {
-        1: "ping_data",
-        2: "players_data",
-        3: "rules_data",
-    }
 
     @property
     def tags(self) -> list[str]:
@@ -266,32 +273,38 @@ class Server(BaseModel):
     @property
     def fake_ip(self) -> int:
         """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
-        ip_parts = [int(part) for part in self.ip.split(".")]
-        return (ip_parts[0] * 256**3) + (ip_parts[1] * 256**2) + (ip_parts[2] * 256) + ip_parts[3]
+        return get_fake_ip(self.ip)
 
-    def query(self, steam_api_key: str) -> dict[str, Any]:
+    @staticmethod
+    def query_from_params(steam_api_key: str, fake_ip: str, fake_port: str) -> dict[str, Any]:
         """Query for the server information using `QueryByFakeIP` endpoint.
 
         Note that we use `QueryByFakeIP` because of the steam datagram relay (SDR) protocol.
 
         Args:
             steam_api_key: steam api key
+            fake_ip: fake ip of server
+            fake_port: fake port of server
         """
         server_data = {}
 
         params: dict[str, str | int] = {
             "key": steam_api_key,
-            "fake_ip": self.fake_ip,
-            "fake_port": self.gameport,
-            "app_id": self.appid,
+            "fake_ip": fake_ip,
+            "fake_port": fake_port,
+            "app_id": 440,
         }
-        for query_type, query_key in self.QUERY_TYPES.items():
+        for query_type, query_key in QUERY_TYPES.items():
             params["query_type"] = query_type
 
-            response = requests.get(self.URL, params)
+            response = requests.get(URL, params)
             server_data[query_key] = response.json()["response"][query_key]
 
         return server_data
+
+    def query(self, steam_api_key: str) -> dict[str, Any]:
+        """Query from self."""
+        return Server.query_from_params(steam_api_key, self.fake_ip, self.gameport)
 
 
 class Query:
