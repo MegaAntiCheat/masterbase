@@ -3,24 +3,25 @@
 import logging
 import os
 from datetime import datetime, timezone
-from typing import IO, cast
+from typing import IO
 from urllib.parse import urlencode
 
 import requests
 import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
-from litestar.connection import ASGIConnection
-from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
-from litestar.handlers.base import BaseRouteHandler
 from litestar.response import Redirect, Stream
-from sqlalchemy import Engine, create_engine
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from masterbase.guards import (
+    analyst_guard,
+    session_closed_guard,
+    user_in_session_guard,
+    user_not_in_session_guard,
+    valid_key_guard,
+)
 from masterbase.lib import (
     add_loser,
     async_steam_id_from_api_key,
-    check_analyst,
     check_is_active,
     check_is_loser,
     check_is_open,
@@ -34,10 +35,8 @@ from masterbase.lib import (
     get_demo_size,
     late_bytes_helper,
     list_demos_helper,
-    make_db_uri,
     make_demo_path,
     provision_api_key,
-    session_closed,
     session_id_from_handle,
     set_open_false,
     set_open_true,
@@ -45,6 +44,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
+from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import is_limited_account
 
 logger = logging.getLogger(__name__)
@@ -52,97 +52,6 @@ logger = logging.getLogger(__name__)
 
 # use this to ensure client only has one open connection
 streaming_sessions: dict[WebSocket, IO] = {}
-
-
-def get_db_connection(app: Litestar) -> Engine:
-    """Get the db engine.
-
-    If it doesn't exist, creates it and saves it in on the application state object
-    """
-    if not getattr(app.state, "engine", None):
-        app.state.engine = create_engine(make_db_uri(), pool_pre_ping=True)
-    return cast("Engine", app.state.engine)
-
-
-def close_db_connection(app: Litestar) -> None:
-    """Close the db connection stored in the application State object."""
-    if getattr(app.state, "engine", None):
-        cast("Engine", app.state.engine).dispose()
-
-
-def get_async_db_connection(app: Litestar) -> AsyncEngine:
-    """Get the async db engine.
-
-    If it doesn't exist, creates it and saves it in on the application state object
-    """
-    if not getattr(app.state, "async_engine", None):
-        app.state.async_engine = create_async_engine(make_db_uri(is_async=True), pool_pre_ping=True)
-    return cast("AsyncEngine", app.state.async_engine)
-
-
-async def close_async_db_connection(app: Litestar) -> None:
-    """Close the db connection stored in the application State object."""
-    if getattr(app.state, "async_engine", None):
-        await cast("AsyncEngine", app.state.async_engine).dispose()
-
-
-async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
-    """Guard clause to validate the user's API key."""
-    api_key = connection.query_params["api_key"]
-
-    async_engine = connection.app.state.async_engine
-    exists = await check_key_exists(async_engine, api_key)
-    if not exists:
-        raise NotAuthorizedException()
-
-
-async def analyst_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
-    """Guard clause to User is an analyst."""
-    api_key = connection.query_params["api_key"]
-    engine = connection.app.state.engine
-    steam_id = steam_id_from_api_key(engine, api_key)
-
-    async_engine = connection.app.state.async_engine
-    exists = await check_analyst(async_engine, steam_id)
-    if not exists:
-        raise NotAuthorizedException()
-
-
-async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
-    """Assert that the user is not currently in a session."""
-    async_engine = connection.app.state.async_engine
-
-    api_key = connection.query_params["api_key"]
-    engine = connection.app.state.engine
-    steam_id = steam_id_from_api_key(engine, api_key)
-    is_active = await check_is_active(async_engine, steam_id)
-
-    if is_active:
-        raise PermissionDeniedException(
-            detail="User already in a session, either remember your session token or close it out at `/close_session`!"
-        )
-
-
-async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
-    """Assert that the user is not currently in a session."""
-    async_engine = connection.app.state.async_engine
-
-    api_key = connection.query_params["api_key"]
-    engine = connection.app.state.engine
-    steam_id = steam_id_from_api_key(engine, api_key)
-    is_active = await check_is_active(async_engine, steam_id)
-    if not is_active:
-        raise PermissionDeniedException(detail="User is not in a session, create one at `/session_id`!")
-
-
-async def session_closed_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
-    """Assert that the session is closed."""
-    async_engine = connection.app.state.async_engine
-
-    session_id = connection.query_params["session_id"]
-    closed = await session_closed(async_engine, session_id)
-    if not closed:
-        raise PermissionDeniedException(detail="Session is still active, cannot retrieve data!")
 
 
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
@@ -406,7 +315,7 @@ def provision_handler(request: Request) -> str:
 
 
 app = Litestar(
-    on_startup=[get_db_connection, get_async_db_connection],
+    on_startup=[startup_registers],
     route_handlers=[
         session_id,
         close_session,
@@ -417,7 +326,7 @@ app = Litestar(
         demodata,
         list_demos,
     ],
-    on_shutdown=[close_db_connection, close_async_db_connection],
+    on_shutdown=[shutdown_registers],
 )
 
 
