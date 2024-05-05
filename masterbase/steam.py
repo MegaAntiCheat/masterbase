@@ -219,7 +219,7 @@ class Filters:
         raise NotImplementedError
 
 
-def get_fake_ip(ip: str) -> str:
+def get_ip_as_integer(ip: str) -> str:
     """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
     ip_parts = [int(part) for part in ip.split(".")]
     return (ip_parts[0] * 256**3) + (ip_parts[1] * 256**2) + (ip_parts[2] * 256) + ip_parts[3]
@@ -271,12 +271,12 @@ class Server(BaseModel):
         return self.addr.split(":")[0]
 
     @property
-    def fake_ip(self) -> int:
+    def ip_as_integer(self) -> int:
         """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
-        return get_fake_ip(self.ip)
+        return get_ip_as_integer(self.ip)
 
     @staticmethod
-    def query_from_params(steam_api_key: str, fake_ip: str, fake_port: str) -> dict[str, Any]:
+    def query_from_params(steam_api_key: str, fake_ip_as_integer: str, fake_port: str) -> dict[str, Any]:
         """Query for the server information using `QueryByFakeIP` endpoint.
 
         Note that we use `QueryByFakeIP` because of the steam datagram relay (SDR) protocol.
@@ -290,7 +290,7 @@ class Server(BaseModel):
 
         params: dict[str, str | int] = {
             "key": steam_api_key,
-            "fake_ip": fake_ip,
+            "fake_ip": fake_ip_as_integer,
             "fake_port": fake_port,
             "app_id": 440,
         }
@@ -304,7 +304,7 @@ class Server(BaseModel):
 
     def query(self, steam_api_key: str) -> dict[str, Any]:
         """Query from self."""
-        return Server.query_from_params(steam_api_key, self.fake_ip, self.gameport)
+        return Server.query_from_params(steam_api_key, self.ip_as_integer, self.gameport)
 
 
 class Query:
