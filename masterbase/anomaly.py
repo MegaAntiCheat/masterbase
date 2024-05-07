@@ -2,7 +2,6 @@ from hmac import new
 from typing import NamedTuple
 
 import numpy as np
-import scipy.sparse as ssp
 
 S_hat = np.load("S_hat.npy")
 
@@ -32,8 +31,8 @@ def nz_markov_likelihood(S_hat, coocs):
 def transition_freqs(data: bytes):
     array = np.frombuffer(data, dtype=np.uint8)
     i, j = array[:-1], array[1:]
-    x = np.ones([i.size], dtype=int)
-    coocs = ssp.coo_array((x, (i, j)), shape=(256, 256), dtype=int).todense()
+    coocs = np.zeros((256, 256), dtype=int)
+    np.add.at(coocs, (i, j), 1)
     return coocs
 
 
