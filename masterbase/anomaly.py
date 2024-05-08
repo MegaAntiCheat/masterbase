@@ -3,8 +3,9 @@
 from typing import NamedTuple
 
 import numpy as np
+from numpy.typing import NDArray
 
-S_hat = np.load("S_hat.npy")
+S_hat: NDArray = np.load("S_hat.npy")
 
 
 def longest_zero_run(data: bytes) -> int:
@@ -20,19 +21,19 @@ def longest_zero_run(data: bytes) -> int:
     return np.max(run_lengths) + 1
 
 
-def likelihood(p, q) -> float:
+def likelihood(p: NDArray, q: NDArray) -> float:
     """Determine the likelihood."""
     return np.exp(np.sum(np.log(p + 1e-5) * q))
 
 
-def nz_markov_likelihood(S_hat, coocs) -> float:
+def nz_markov_likelihood(S_hat: NDArray, coocs: NDArray) -> float:
     """Determine the NZ-Markov likelihood."""
     S_hat, coocs = map(lambda a: a.reshape(-1)[1:], (S_hat, coocs))
     S_hat, coocs = map(lambda a: a / a.sum(), (S_hat, coocs))
-    return likelihood(S_hat, coocs)
+    return float(likelihood(S_hat, coocs))
 
 
-def transition_freqs(data: bytes):
+def transition_freqs(data: bytes) -> NDArray:
     """Get the transition frequencies."""
     array = np.frombuffer(data, dtype=np.uint8)
     i, j = array[:-1], array[1:]
@@ -46,17 +47,17 @@ class DetectionState(NamedTuple):
     likelihood: float = 0.0
     longest_zero_run: int = 0
 
-    def update(self, data: bytes):
+    def update(self, data: bytes) -> "DetectionState":
         """Update the current state."""
         new_length = len(data) + self.length
         new_likelihood = (
-            self.likelihood * self.length + nz_markov_likelihood(data) * len(data)
+            self.likelihood * self.length
+            + nz_markov_likelihood(transition_freqs(data)) * len(data)
         ) / new_length
-        new_likelihood = float(new_likelihood)
         new_longest_zero_run = max(self.longest_zero_run, longest_zero_run(data))
         return DetectionState(new_length, new_likelihood, new_longest_zero_run)
 
     @property
-    def anomalous(self) -> bool:
+    def anomalous(self: "DetectionState") -> bool:
         """Return if the current state is anomalous or not."""
         return self.likelihood <= 3e-5 or self.longest_zero_run >= 384
