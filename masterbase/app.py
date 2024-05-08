@@ -328,6 +328,7 @@ app = Litestar(
         list_demos,
     ],
     on_shutdown=shutdown_registers,
+    opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
 
 
