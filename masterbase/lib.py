@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 import secrets
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import IO, Any, AsyncGenerator
 from uuid import uuid4
@@ -12,6 +13,8 @@ import sqlalchemy as sa
 from litestar import WebSocket
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
+
+from masterbase.anomaly import DetectionState
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +36,22 @@ def make_db_uri(is_async: bool = False) -> str:
         prefix = f"{prefix}+asyncpg"
 
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
+
+@dataclass
+class DemoObjects:
+    """Helper class to facilitate access."""
+
+    io: IO
+    detection_state: DetectionState = field(default_factory=DetectionState())
+
+    def write(self, data: bytes) -> None:
+        """Write data to both handle and state objects."""
+        self.io.write(data)
+        self.detection_state.update(data)
+
+    def close(self) -> None:
+        """Close objects."""
+        self.io.close()
 
 
 def make_demo_path(session_id: str) -> str:

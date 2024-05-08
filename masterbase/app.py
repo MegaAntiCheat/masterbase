@@ -3,7 +3,6 @@
 import logging
 import os
 from datetime import datetime, timezone
-from typing import IO
 from urllib.parse import urlencode
 
 import requests
@@ -20,6 +19,7 @@ from masterbase.guards import (
     valid_key_guard,
 )
 from masterbase.lib import (
+    DemoObjects,
     add_loser,
     async_steam_id_from_api_key,
     check_is_active,
@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 
 # use this to ensure client only has one open connection
-streaming_sessions: dict[WebSocket, IO] = {}
+streaming_sessions: dict[WebSocket, DemoObjects] = {}
 
 
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
@@ -176,7 +176,7 @@ class DemoHandler(WebsocketListener):
             logger.info(f"Creating new handle for session ID: {session_id}")
             mode = "wb"
 
-        streaming_sessions[socket] = open(path, mode)
+        streaming_sessions[socket] = DemoObjects(io=open(path, mode), detection_state=None)
 
     async def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
         """Close handle on disconnect."""
@@ -191,6 +191,7 @@ class DemoHandler(WebsocketListener):
         session_id = session_id_from_handle(streaming_sessions[socket])
         logger.info(f"Sinking {len(data)} bytes to {session_id}")
         streaming_sessions[socket].write(data)
+        print(streaming_sessions[socket].detection_state.anomalous)
 
 
 @get("/provision", sync_to_thread=False)

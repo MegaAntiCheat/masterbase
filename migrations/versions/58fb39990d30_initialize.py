@@ -59,6 +59,7 @@ def upgrade() -> None:
             demo_oid oid,
             demo_size integer,
             late_bytes bytea,
+            markov_score double precision,
             created_at timestamptz,
             updated_at timestamptz,
             PRIMARY KEY (session_id)
