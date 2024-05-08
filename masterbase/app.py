@@ -11,6 +11,7 @@ from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Stream
 
+from masterbase.anomaly import DetectionState
 from masterbase.guards import (
     analyst_guard,
     session_closed_guard,
@@ -19,8 +20,8 @@ from masterbase.guards import (
     valid_key_guard,
 )
 from masterbase.lib import (
-    DemoObjects,
-    StreamingSessionType,
+    DemoSessionManager,
+    SocketManagerMapType,
     add_loser,
     async_steam_id_from_api_key,
     check_is_active,
@@ -36,9 +37,7 @@ from masterbase.lib import (
     get_demo_size,
     late_bytes_helper,
     list_demos_helper,
-    make_demo_path,
     provision_api_key,
-    session_id_from_handle,
     set_open_false,
     set_open_true,
     start_session_helper,
@@ -52,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 
 # use this to ensure client only has one open connection
-streaming_sessions: StreamingSessionType = {}
+streaming_sessions: SocketManagerMapType = {}
 
 
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
@@ -167,31 +166,30 @@ class DemoHandler(WebsocketListener):
 
         await set_open_true(engine, steam_id, session_id)
 
-        path = make_demo_path(session_id)
+        session_manager = DemoSessionManager(session_id=session_id, detection_state=DetectionState())
 
-        demo_path_exists = os.path.exists(path)
-        if demo_path_exists:
+        if os.path.exists(session_manager.demo_path):
             mode = "ab"
             logger.info(f"Found existing handle for session ID: {session_id}")
         else:
             logger.info(f"Creating new handle for session ID: {session_id}")
             mode = "wb"
 
-        streaming_sessions[socket] = DemoObjects(io=open(path, mode))
+        session_manager.set_demo_handle(mode)
+        streaming_sessions[socket] = session_manager
 
     async def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
         """Close handle on disconnect."""
-        session_id = session_id_from_handle(streaming_sessions[socket].io)
-        logger.info(f"Received socket disconnect from session ID: {session_id}")
-        streaming_sessions[socket].close()
-        streaming_sessions.pop(socket)
-        await set_open_false(socket.app.state.async_engine, session_id)
+        session_manager = streaming_sessions[socket]
+        logger.info(f"Received socket disconnect from session ID: {session_manager.session_id}")
+        session_manager.close()
+        await set_open_false(socket.app.state.async_engine, session_manager.session_id)
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
         """Write data on disconnect."""
-        session_id = session_id_from_handle(streaming_sessions[socket].io)
-        logger.info(f"Sinking {len(data)} bytes to {session_id}")
-        streaming_sessions[socket].write(data)
+        session_manager = streaming_sessions[socket]
+        logger.info(f"Sinking {len(data)} bytes to {session_manager.session_id}")
+        session_manager.write(data)
 
 
 @get("/provision", sync_to_thread=False)

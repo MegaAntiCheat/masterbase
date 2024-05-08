@@ -91,5 +91,6 @@ def downgrade() -> None:
         DROP TABLE api_keys;
         DROP TABLE beta_tester_steam_ids;
         DROP TABLE analyst_steam_ids;
+        DROP TABLE losers;
         """
     )

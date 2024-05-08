@@ -29,8 +29,8 @@ def likelihood(p: NDArray, q: NDArray) -> float:
 
 def nz_markov_likelihood(coocs: NDArray) -> float:
     """Determine the NZ-Markov likelihood."""
-    _S_hat, coocs = map(lambda a: a.reshape(-1)[1:], (S_hat, coocs))
-    _S_hat, coocs = map(lambda a: a / a.sum(), (_S_hat, coocs))
+    _S_hat, coocs = map(lambda a: a.reshape(-1)[1:], (S_hat, coocs))  # noqa
+    _S_hat, coocs = map(lambda a: a / a.sum(), (_S_hat, coocs))  # noqa
     return float(likelihood(_S_hat, coocs))
 
 
