@@ -9,9 +9,9 @@ from masterbase.lib import DEMOS_PATH, DemoSessionManager, generate_uuid4_int, m
 
 
 @pytest.fixture(scope="session")
-def session_id() -> int:
+def session_id() -> str:
     """Session ID fixture."""
-    return generate_uuid4_int()
+    return str(generate_uuid4_int())
 
 
 @pytest.fixture
