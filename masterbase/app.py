@@ -315,7 +315,7 @@ def provision_handler(request: Request) -> str:
 
 
 app = Litestar(
-    on_startup=[startup_registers],
+    on_startup=startup_registers,
     route_handlers=[
         session_id,
         close_session,
@@ -326,7 +326,7 @@ app = Litestar(
         demodata,
         list_demos,
     ],
-    on_shutdown=[shutdown_registers],
+    on_shutdown=shutdown_registers,
 )
 
 
