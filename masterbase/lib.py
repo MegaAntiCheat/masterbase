@@ -37,12 +37,13 @@ def make_db_uri(is_async: bool = False) -> str:
 
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
 
+
 @dataclass
 class DemoObjects:
     """Helper class to facilitate access."""
 
     io: IO
-    detection_state: DetectionState = field(default_factory=DetectionState())
+    detection_state: DetectionState = field(default_factory=DetectionState())  # type: ignore
 
     def write(self, data: bytes) -> None:
         """Write data to both handle and state objects."""
@@ -52,6 +53,9 @@ class DemoObjects:
     def close(self) -> None:
         """Close objects."""
         self.io.close()
+
+
+StreamingSessionType = dict[WebSocket, DemoObjects]
 
 
 def make_demo_path(session_id: str) -> str:
@@ -340,7 +344,7 @@ def _close_session_with_demo(
         conn.commit()
 
 
-def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: dict[WebSocket, IO]) -> str:
+def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: StreamingSessionType) -> str:
     """Properly close a session and return a summary message.
 
     Args:
@@ -376,7 +380,8 @@ def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: dict
 
     # remove session from active sessions
     to_pop = None
-    for session, handle in streaming_sessions.items():
+    for session in streaming_sessions:
+        handle = streaming_sessions[session].io
         handle_id = session_id_from_handle(handle)
         if handle_id == latest_session_id:
             to_pop = session

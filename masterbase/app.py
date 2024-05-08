@@ -20,6 +20,7 @@ from masterbase.guards import (
 )
 from masterbase.lib import (
     DemoObjects,
+    StreamingSessionType,
     add_loser,
     async_steam_id_from_api_key,
     check_is_active,
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 
 # use this to ensure client only has one open connection
-streaming_sessions: dict[WebSocket, DemoObjects] = {}
+streaming_sessions: StreamingSessionType = {}
 
 
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
@@ -176,11 +177,11 @@ class DemoHandler(WebsocketListener):
             logger.info(f"Creating new handle for session ID: {session_id}")
             mode = "wb"
 
-        streaming_sessions[socket] = DemoObjects(io=open(path, mode), detection_state=None)
+        streaming_sessions[socket] = DemoObjects(io=open(path, mode))
 
     async def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
         """Close handle on disconnect."""
-        session_id = session_id_from_handle(streaming_sessions[socket])
+        session_id = session_id_from_handle(streaming_sessions[socket].io)
         logger.info(f"Received socket disconnect from session ID: {session_id}")
         streaming_sessions[socket].close()
         streaming_sessions.pop(socket)
@@ -188,7 +189,7 @@ class DemoHandler(WebsocketListener):
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
         """Write data on disconnect."""
-        session_id = session_id_from_handle(streaming_sessions[socket])
+        session_id = session_id_from_handle(streaming_sessions[socket].io)
         logger.info(f"Sinking {len(data)} bytes to {session_id}")
         streaming_sessions[socket].write(data)
         print(streaming_sessions[socket].detection_state.anomalous)
