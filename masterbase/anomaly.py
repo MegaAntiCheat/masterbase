@@ -1,11 +1,12 @@
 """Anomaly detection for demo streams."""
 
-from typing import NamedTuple
+import os
 
 import numpy as np
 from numpy.typing import NDArray
+from pydantic import BaseModel, Field
 
-S_hat: NDArray = np.load("S_hat.npy")
+S_hat: NDArray = np.load(os.path.join("masterbase", "S_hat.npy"))
 
 
 def longest_zero_run(data: bytes) -> int:
@@ -26,7 +27,7 @@ def likelihood(p: NDArray, q: NDArray) -> float:
     return np.exp(np.sum(np.log(p + 1e-5) * q))
 
 
-def nz_markov_likelihood(S_hat: NDArray, coocs: NDArray) -> float:
+def nz_markov_likelihood(coocs: NDArray) -> float:
     """Determine the NZ-Markov likelihood."""
     S_hat, coocs = map(lambda a: a.reshape(-1)[1:], (S_hat, coocs))
     S_hat, coocs = map(lambda a: a / a.sum(), (S_hat, coocs))
@@ -42,22 +43,25 @@ def transition_freqs(data: bytes) -> NDArray:
     return coocs
 
 
-class DetectionState(NamedTuple):
-    length: int = 0
-    likelihood: float = 0.0
-    longest_zero_run: int = 0
+class DetectionState(BaseModel):
+    """Track state of anomalies."""
 
-    def update(self, data: bytes) -> "DetectionState":
+    length: int = Field(default=0)
+    likelihood: float = Field(default=0.0)
+    longest_zero_run: int = Field(default=0)
+
+    def update(self, data: bytes) -> None:
         """Update the current state."""
         new_length = len(data) + self.length
         new_likelihood = (
-            self.likelihood * self.length
-            + nz_markov_likelihood(transition_freqs(data)) * len(data)
+            self.likelihood * self.length + nz_markov_likelihood(transition_freqs(data)) * len(data)
         ) / new_length
         new_longest_zero_run = max(self.longest_zero_run, longest_zero_run(data))
-        return DetectionState(new_length, new_likelihood, new_longest_zero_run)
+        self.length = new_length
+        self.new_likelihood = new_likelihood
+        self.new_longest_zero_run = new_longest_zero_run
 
     @property
-    def anomalous(self: "DetectionState") -> bool:
+    def anomalous(self) -> bool:
         """Return if the current state is anomalous or not."""
         return self.likelihood <= 3e-5 or self.longest_zero_run >= 384
