@@ -43,7 +43,7 @@ class DemoObjects:
     """Helper class to facilitate access."""
 
     io: IO
-    detection_state: DetectionState = field(default_factory=DetectionState())  # type: ignore
+    detection_state: DetectionState = field(default_factory=DetectionState)  # type: ignore
 
     def write(self, data: bytes) -> None:
         """Write data to both handle and state objects."""

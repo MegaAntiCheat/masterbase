@@ -29,9 +29,9 @@ def likelihood(p: NDArray, q: NDArray) -> float:
 
 def nz_markov_likelihood(coocs: NDArray) -> float:
     """Determine the NZ-Markov likelihood."""
-    S_hat, coocs = map(lambda a: a.reshape(-1)[1:], (S_hat, coocs))
-    S_hat, coocs = map(lambda a: a / a.sum(), (S_hat, coocs))
-    return float(likelihood(S_hat, coocs))
+    _S_hat, coocs = map(lambda a: a.reshape(-1)[1:], (S_hat, coocs))
+    _S_hat, coocs = map(lambda a: a / a.sum(), (_S_hat, coocs))
+    return float(likelihood(_S_hat, coocs))
 
 
 def transition_freqs(data: bytes) -> NDArray:
@@ -58,8 +58,8 @@ class DetectionState(BaseModel):
         ) / new_length
         new_longest_zero_run = max(self.longest_zero_run, longest_zero_run(data))
         self.length = new_length
-        self.new_likelihood = new_likelihood
-        self.new_longest_zero_run = new_longest_zero_run
+        self.likelihood = new_likelihood
+        self.longest_zero_run = new_longest_zero_run
 
     @property
     def anomalous(self) -> bool:

@@ -192,7 +192,6 @@ class DemoHandler(WebsocketListener):
         session_id = session_id_from_handle(streaming_sessions[socket].io)
         logger.info(f"Sinking {len(data)} bytes to {session_id}")
         streaming_sessions[socket].write(data)
-        print(streaming_sessions[socket].detection_state.anomalous)
 
 
 @get("/provision", sync_to_thread=False)
