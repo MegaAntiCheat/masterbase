@@ -10,7 +10,10 @@ S_hat: NDArray = np.load(os.path.join("masterbase", "S_hat.npy"))
 
 
 def longest_zero_run(data: bytes) -> int:
-    """Get the longest zero run of data."""
+    """Get the longest zero run of data.
+    :param data: Input data stream.
+    :type data: bytes
+    """
     array = np.frombuffer(data, dtype=np.uint8)
     zero_mask = array == 0
     eq_mask = np.empty_like(array, dtype=bool)
@@ -23,19 +26,33 @@ def longest_zero_run(data: bytes) -> int:
 
 
 def likelihood(p: NDArray, q: NDArray) -> float:
-    """Determine the likelihood."""
+    """Determine the likelihood of an empirical frequency distribution under
+    a prior discrete probability distribution.
+    
+    :param p: class:`numpy.ndarray`, Discrete prior distribution
+    :type p: class:`numpy.ndarray`
+    :param q: numpy.ndarray, Observed empirical distribution, normalized
+    :type q: class:`numpy.ndarray`
+    """
     return np.exp(np.sum(np.log(p + 1e-5) * q))
 
 
 def nz_markov_likelihood(coocs: NDArray) -> float:
-    """Determine the NZ-Markov likelihood."""
+    """Determine the Markov likelihood of all byte-pair transitions, between
+    *nonzero* bytes, e.g., as determined by `transition_freqs`.
+    :param coocs: class:`numpy.ndarray`
+    :type coocs: class:`numpy.ndarray`
+    """
     _S_hat, coocs = map(lambda a: a.reshape(-1)[1:], (S_hat, coocs))  # noqa
     _S_hat, coocs = map(lambda a: a / a.sum(), (_S_hat, coocs))  # noqa
     return float(likelihood(_S_hat, coocs))
 
 
 def transition_freqs(data: bytes) -> NDArray:
-    """Get the transition frequencies."""
+    """Count the cooccurrences of successive octets (transition frequencies).
+    :param data: bytes, the input data stream
+    :type data: bytes
+    """
     array = np.frombuffer(data, dtype=np.uint8)
     i, j = array[:-1], array[1:]
     coocs = np.zeros((256, 256), dtype=int)
@@ -44,14 +61,30 @@ def transition_freqs(data: bytes) -> NDArray:
 
 
 class DetectionState(BaseModel):
-    """Track state of anomalies."""
+    """Accumulate a trace of statistics for determining the likelihood of
+    observed data under Markov transition frequencies present in valid data.
+    
+    :param length: The cumulative length of all inputs thus far.
+    :type length: int, optional
+
+    :param likelihood: The cumulative probability of observing the input data
+    under `S_hat` so far.
+    :type likelihood: float, optional
+    :param longest_zero_run: The longest run of consecutive zeros observed in
+    the input data chunks so far.
+    :type longest_zero_run: int, optional
+    """
 
     length: int = Field(default=0)
     likelihood: float = Field(default=0.0)
     longest_zero_run: int = Field(default=0)
 
     def update(self, data: bytes) -> None:
-        """Update the current state."""
+        """Update the current state trace with stats from the input data.
+        :param data: bytes, input data whose likelihood to compute under the
+        prior transition matrix to accumulate into statistics for the stream.
+        :type data: bytes
+        """
         new_length = len(data) + self.length
         new_likelihood = (
             self.likelihood * self.length + nz_markov_likelihood(transition_freqs(data)) * len(data)
