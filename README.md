@@ -142,7 +142,7 @@ docker network create --driver bridge masterbase-network
 Build the DB:
 
 ```sh
-docker build -f Dockerfile.db . -t db
+docker build -f database.Dockerfile . -t db
 ```
 
 Run the DB:
@@ -160,7 +160,7 @@ pdm run alembic upgrade head
 Build the API:
 
 ```sh
-docker build -f Dockerfile.api . -t api
+docker build -f api.Dockerfile . -t api
 ```
 
 Now before we run, we need to inject the IPv4 of the db container. We can find this by running `docker network inspect masterbase-network` and inspecting the output. In my case, I see the IP as `172.20.0.2`

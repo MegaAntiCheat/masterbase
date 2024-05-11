@@ -1,0 +1,42 @@
+name: masterbase
+
+services:
+  api:
+    container_name: masterbase-api
+    env_file:
+      - ./build.env
+    build:
+      dockerfile: api.Dockerfile
+      args:
+        DEVELOPMENT=${DEVELOPMENT}
+    links:
+      - db
+    restart: unless-stopped
+    ports:
+      - 8000:8000
+    networks:
+      masterbase-network:
+        ipv4_address: ${API_HOST}
+
+  db:
+    container_name: masterbase-db
+    env_file:
+      - ./build.env
+    build:
+      dockerfile: database.Dockerfile
+    restart: unless-stopped
+    ports:
+      - 8050:${POSTGRES_PORT}
+    networks:
+      masterbase-network:
+        ipv4_address: ${POSTGRES_HOST}
+
+networks:
+  masterbase-network:
+    name: masterbase-network-dev
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
+          gateway: 172.20.0.1
