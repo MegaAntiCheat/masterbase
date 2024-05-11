@@ -295,8 +295,6 @@ class Server(BaseModel):
             "app_id": 440,
         }
         for query_type, query_key in QUERY_TYPES.items():
-            print("ASDFASDF")
-            print(query_type)
             params["query_type"] = query_type
 
             response = requests.get(URL, params)
