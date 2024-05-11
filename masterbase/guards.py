@@ -10,7 +10,7 @@ from masterbase.steam import Server, get_ip_as_integer, get_steam_api_key
 
 def _development_feature_flag(connection: ASGIConnection) -> bool:
     """Return truthy value of `DEVELOPMENT` feature flag from the app.opts."""
-    return connection.app.opts["DEVELOPMENT"]
+    return connection.app.opt["DEVELOPMENT"]
 
 
 async def valid_key_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
