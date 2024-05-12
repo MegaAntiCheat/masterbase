@@ -13,7 +13,7 @@ def longest_zero_run(data: bytes) -> int:
     """Get the longest zero run of data.
 
     Args:
-    data: Input data stream
+        data: Input data stream
     """
     array = np.frombuffer(data, dtype=np.uint8)
     zero_mask = array == 0
@@ -30,8 +30,8 @@ def likelihood(p: NDArray, q: NDArray) -> float:
     """Determine the likelihood of an empirical frequency distribution under a prior discrete probability distribution.
 
     Args:
-        p: class:`numpy.ndarray`, Discrete prior distribution
-        q: numpy.ndarray, Observed empirical distribution, normalized
+        p: Discrete prior distribution
+        q: Observed empirical distribution, normalized
     """
     return np.exp(np.sum(np.log(p + 1e-5) * q))
 
@@ -40,7 +40,7 @@ def nz_markov_likelihood(coocs: NDArray) -> float:
     """Determine the Markov likelihood of all byte-pair transitions, between *nonzero* bytes, e.g., as determined by `transition_freqs`.
 
     Args:
-        coocs: class:`numpy.ndarray`
+        coocs: cooccurrences of successive octets (transition frequencies).
     """  # noqa
     _S_hat, coocs = map(lambda a: a.reshape(-1)[1:], (S_hat, coocs))  # noqa
     _S_hat, coocs = map(lambda a: a / a.sum(), (_S_hat, coocs))  # noqa
