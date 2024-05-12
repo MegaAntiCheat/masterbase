@@ -18,6 +18,7 @@ from masterbase.guards import (
     user_in_session_guard,
     user_not_in_session_guard,
     valid_key_guard,
+    valid_session_guard,
 )
 from masterbase.lib import (
     DemoSessionManager,
@@ -54,7 +55,7 @@ logger = logging.getLogger(__name__)
 streaming_sessions: SocketManagerMapType = {}
 
 
-@get("/session_id", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
+@get("/session_id", guards=[valid_key_guard, user_in_session_guard, valid_session_guard], sync_to_thread=False)
 def session_id(
     request: Request,
     api_key: str,
@@ -326,6 +327,7 @@ app = Litestar(
         list_demos,
     ],
     on_shutdown=shutdown_registers,
+    opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
 
 
