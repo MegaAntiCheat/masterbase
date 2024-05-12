@@ -383,23 +383,23 @@ def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: Sock
     if session_manager is None:
         _close_session_without_demo(engine, steam_id, current_time)
         msg = "No active session found, closing anyway."
-
-    elif session_manager is not None and os.path.exists(session_manager.demo_path):
-        _close_session_with_demo(
-            engine,
-            steam_id,
-            latest_session_id,
-            current_time,
-            session_manager.demo_path,
-            session_manager.detection_state.likelihood,
-        )
-        os.remove(session_manager.demo_path)
-        msg = "Active session was closed, demo inserted."
-
-    # we found no session but did find a demo
     else:
-        os.remove(session_manager.demo_path)
-        msg = f"Found orphaned session and demo at {session_manager.demo_path} and removed."
+        if os.path.exists(session_manager.demo_path):
+            _close_session_with_demo(
+                engine,
+                steam_id,
+                latest_session_id,
+                current_time,
+                session_manager.demo_path,
+                session_manager.detection_state.likelihood,
+            )
+            os.remove(session_manager.demo_path)
+            msg = "Active session was closed, demo inserted."
+
+        # we found no session but did find a demo
+        else:
+            os.remove(session_manager.demo_path)
+            msg = f"Found orphaned session and demo at {session_manager.demo_path} and removed."
 
     # remove session from active sessions
     if socket is not None:
