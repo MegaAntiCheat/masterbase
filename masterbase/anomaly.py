@@ -68,7 +68,6 @@ class DetectionState(BaseModel):
         likelihood: The cumulative probability of observing the input data under `S_hat` so far.
         longest_zero_run: The longest run of consecutive zeros observed in the input data chunks so far.
     """  # noqa
-
     length: int = Field(default=0)
     likelihood: float = Field(default=0.0)
     longest_zero_run: int = Field(default=0)
