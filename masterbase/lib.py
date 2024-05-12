@@ -10,7 +10,6 @@ from uuid import uuid4
 
 import sqlalchemy as sa
 from litestar import WebSocket
-from pydantic import BaseModel, Field
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -38,12 +37,18 @@ def make_db_uri(is_async: bool = False) -> str:
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
 
 
-class DemoSessionManager(BaseModel):
+class DemoSessionManager:
     """Helper class to facilitate access."""
 
-    session_id: str
-    detection_state: DetectionState
-    handle: Any = Field(default=None)
+    def __init__(self, session_id: str, detection_state: DetectionState) -> None:
+        """Create a demo session manager.
+
+        Args:
+            session_id: ID of the session
+            detection_state: DetectionState object to call
+        """
+        self.session_id = session_id
+        self.detection_state = detection_state
 
     @property
     def demo_path(self) -> str:
@@ -54,12 +59,12 @@ class DemoSessionManager(BaseModel):
         """Open a handle with the mode at `self.demo_path`."""
         self.handle = open(self.demo_path, mode)
 
-    def write(self, data: bytes) -> None:
+    def update(self, data: bytes) -> None:
         """Write data to both handle and state objects."""
         self.handle.write(data)
         self.detection_state.update(data)
 
-    def close(self) -> None:
+    def disconnect(self) -> None:
         """Close objects."""
         self.handle.close()
 

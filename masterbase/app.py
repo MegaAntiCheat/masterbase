@@ -182,14 +182,14 @@ class DemoHandler(WebsocketListener):
         """Close handle on disconnect."""
         session_manager = streaming_sessions[socket]
         logger.info(f"Received socket disconnect from session ID: {session_manager.session_id}")
-        session_manager.close()
+        session_manager.disconnect()
         await set_open_false(socket.app.state.async_engine, session_manager.session_id)
 
     def on_receive(self, data: bytes, socket: WebSocket) -> None:
         """Write data on disconnect."""
         session_manager = streaming_sessions[socket]
         logger.info(f"Sinking {len(data)} bytes to {session_manager.session_id}")
-        session_manager.write(data)
+        session_manager.update(data)
 
 
 @get("/provision", sync_to_thread=False)
