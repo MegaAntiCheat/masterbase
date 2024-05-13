@@ -1,0 +1,7 @@
+@import 'material_sphinx.css';
+
+.sig.sig-object.py{
+    font-feature-settings: "kern";
+    font-family: "Roboto Mono", "Courier New", Courier, monospace;
+    background: #f8f8f8;
+}

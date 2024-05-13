@@ -1,4 +1,21 @@
-"""Anomaly detection for demo streams."""
+"""
+Anomaly detection for demo streams.
+
+Classes:
+- DetectionState
+
+Functions:
+- longest_zero_run
+- likelihood
+- nz_markov_likelihood
+- transition_freqs
+
+Misc variables:
+- S_hat
+"""
+
+__author__ = "Flenser, Jayce"
+__version__ = "1.0.0"
 
 import os
 
@@ -6,14 +23,18 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
-S_hat: NDArray = np.load(os.path.join("masterbase", "S_hat.npy"))
+
+S_hat: NDArray | None = None
 
 
 def longest_zero_run(data: bytes) -> int:
-    """Get the longest zero run of data.
+    """
+    Get the longest zero run of data.
 
-    Args:
-        data: Input data stream
+    :param data: Input data stream
+    :type data: bytes
+    :return: longest zero run
+    :rtype: int
     """
     array = np.frombuffer(data, dtype=np.uint8)
     zero_mask = array == 0
@@ -27,31 +48,46 @@ def longest_zero_run(data: bytes) -> int:
 
 
 def likelihood(p: NDArray, q: NDArray) -> float:
-    """Determine the likelihood of an empirical frequency distribution under a prior discrete probability distribution.
+    """
+    Determine the likelihood of an empirical frequency distribution under a prior discrete probability distribution.
 
-    Args:
-        p: Discrete prior distribution
-        q: Observed empirical distribution, normalized
+    :param p: Discrete prior distribution
+    :type p: NDArray
+    :param q: Observed empirical distribution, normalized
+    :type q: NDArray
+    :return: likelihood
+    :rtype: float
     """
     return np.exp(np.sum(np.log(p + 1e-5) * q))
 
 
 def nz_markov_likelihood(coocs: NDArray) -> float:
-    """Determine the Markov likelihood of all byte-pair transitions, between *nonzero* bytes, e.g., as determined by `transition_freqs`.
+    """
+    Determine the Markov likelihood of all byte-pair transitions, between *nonzero* bytes, 
+    e.g., as determined by `transition_freqs`.
 
-    Args:
-        coocs: cooccurrences of successive octets (transition frequencies).
+    :param coocs: cooccurrences of successive octets (transition frequencies).
+    :type coocs: NDArray
+    :return: likelihood
+    :rtype: float
     """  # noqa
+    global S_hat
+    if S_hat is None:
+        S_hat = np.load(os.path.join("data", "npy", "S_hat.npy"))
+
     _S_hat, coocs = map(lambda a: a.reshape(-1)[1:], (S_hat, coocs))  # noqa
     _S_hat, coocs = map(lambda a: a / a.sum(), (_S_hat, coocs))  # noqa
     return float(likelihood(_S_hat, coocs))
 
 
 def transition_freqs(data: bytes) -> NDArray:
-    """Count the cooccurrences of successive octets (transition frequencies).
+    """
+    Count the co-occurrences of successive octets (transition frequencies).
 
-    Args:
-        data: bytes, the input data stream
+    :param data: the input data stream
+    :type data: bytes
+    :return: Array of co-occurrences
+    :rtype: NDArray
     """
     array = np.frombuffer(data, dtype=np.uint8)
     i, j = array[:-1], array[1:]
@@ -61,23 +97,27 @@ def transition_freqs(data: bytes) -> NDArray:
 
 
 class DetectionState(BaseModel):
-    """Accumulate a trace of statistics for determining the likelihood of observed data under Markov transition frequencies present in valid data.
-
-    Args:
+    """
+    Accumulate a trace of statistics for determining the likelihood of observed data under Markov transition 
+    frequencies present in valid data.
+    
+    Attributes:
         length: The cumulative length of all inputs thus far.
         likelihood: The cumulative probability of observing the input data under `S_hat` so far.
         longest_zero_run: The longest run of consecutive zeros observed in the input data chunks so far.
     """  # noqa
-
     length: int = Field(default=0)
     likelihood: float = Field(default=0.0)
     longest_zero_run: int = Field(default=0)
 
     def update(self, data: bytes) -> None:
-        """Update the current state trace with stats from the input data.
+        """
+        Update the current state trace with stats from the input data.
 
-        Args:
-            data: bytes, input data whose likelihood to compute under the prior transition matrix to accumulate into statistics for the stream.
+        :param data: input data whose likelihood to compute under the prior transition matrix to accumulate 
+                     into statistics for the stream.
+        :type data: bytes
+        :return: None
         """  # noqa
         new_length = len(data) + self.length
         new_likelihood = (
@@ -90,5 +130,10 @@ class DetectionState(BaseModel):
 
     @property
     def anomalous(self) -> bool:
-        """Return if the current state is anomalous or not."""
+        """
+        Return if the current state is anomalous or not.
+
+        :return: true if likelihood indicates anonymity
+        :rtype: bool
+        """
         return self.likelihood <= 3e-5 or self.longest_zero_run >= 384
