@@ -13,6 +13,8 @@ from litestar import WebSocket
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from masterbase.anomaly import DetectionState
+
 logger = logging.getLogger(__name__)
 
 DEMOS_PATH = os.path.expanduser(os.path.join("~/media", "demos"))
@@ -35,9 +37,39 @@ def make_db_uri(is_async: bool = False) -> str:
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
 
 
-def make_demo_path(session_id: str) -> str:
-    """Make the demo path for the current session."""
-    return os.path.join(DEMOS_PATH, f"{session_id}.dem")
+class DemoSessionManager:
+    """Helper class to facilitate access."""
+
+    def __init__(self, session_id: str, detection_state: DetectionState) -> None:
+        """Create a demo session manager.
+
+        Args:
+            session_id: ID of the session
+            detection_state: DetectionState object to call
+        """
+        self.session_id = session_id
+        self.detection_state = detection_state
+
+    @property
+    def demo_path(self) -> str:
+        """Path of the demo for this session."""
+        return os.path.join(DEMOS_PATH, f"{self.session_id}.dem")
+
+    def set_demo_handle(self, mode: str) -> None:
+        """Open a handle with the mode at `self.demo_path`."""
+        self.handle = open(self.demo_path, mode)
+
+    def update(self, data: bytes) -> None:
+        """Write data to both handle and state objects."""
+        self.handle.write(data)
+        self.detection_state.update(data)
+
+    def disconnect(self) -> None:
+        """Close objects."""
+        self.handle.close()
+
+
+SocketManagerMapType = dict[WebSocket, DemoSessionManager]
 
 
 def steam_id_from_api_key(engine: Engine, api_key: str) -> str:
@@ -289,7 +321,7 @@ def _close_session_without_demo(engine: Engine, steam_id: str, current_time: dat
 
 
 def _close_session_with_demo(
-    engine: Engine, steam_id: str, session_id: str, current_time: datetime, demo_path: str
+    engine: Engine, steam_id: str, session_id: str, current_time: datetime, demo_path: str, markov_score: float
 ) -> None:
     """Close out a session in the DB."""
     with engine.connect() as conn:
@@ -304,6 +336,7 @@ def _close_session_with_demo(
                 end_time = :end_time,
                 demo_oid = :demo_oid,
                 demo_size = :demo_size,
+                markov_score = :markov_score,
                 updated_at = :updated_at
                 WHERE
                 steam_id = :steam_id AND
@@ -315,13 +348,14 @@ def _close_session_with_demo(
                 "end_time": current_time.isoformat(),
                 "updated_at": current_time.isoformat(),
                 "demo_size": size,
+                "markov_score": markov_score,
                 "demo_oid": oid,
             },
         )
         conn.commit()
 
 
-def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: dict[WebSocket, IO]) -> str:
+def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType) -> str:
     """Properly close a session and return a summary message.
 
     Args:
@@ -336,34 +370,40 @@ def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: dict
     if latest_session_id is None:
         return "User has never been in a session!"
 
-    demo_path = make_demo_path(latest_session_id)
-    demo_path_exists = os.path.exists(demo_path)
+    # find session manager and socket/key...
+    session_manager = None
+    socket = None
+    for _socket in streaming_sessions:
+        if streaming_sessions[_socket].session_id == latest_session_id:
+            session_manager = streaming_sessions[_socket]
+            socket = _socket
 
     current_time = datetime.now().astimezone(timezone.utc)
 
-    if latest_session_id is None or not demo_path_exists:
+    if session_manager is None:
         _close_session_without_demo(engine, steam_id, current_time)
         msg = "No active session found, closing anyway."
-
-    elif latest_session_id is not None and demo_path_exists:
-        _close_session_with_demo(engine, steam_id, latest_session_id, current_time, demo_path)
-        os.remove(demo_path)
-        msg = "Active session was closed, demo inserted."
-
-    # we found no session but did find a demo
     else:
-        os.remove(demo_path)
-        msg = f"Found orphaned session and demo at {demo_path} and removed."
+        if os.path.exists(session_manager.demo_path):
+            _close_session_with_demo(
+                engine,
+                steam_id,
+                latest_session_id,
+                current_time,
+                session_manager.demo_path,
+                session_manager.detection_state.likelihood,
+            )
+            os.remove(session_manager.demo_path)
+            msg = "Active session was closed, demo inserted."
+
+        # we found no session but did find a demo
+        else:
+            os.remove(session_manager.demo_path)
+            msg = f"Found orphaned session and demo at {session_manager.demo_path} and removed."
 
     # remove session from active sessions
-    to_pop = None
-    for session, handle in streaming_sessions.items():
-        handle_id = session_id_from_handle(handle)
-        if handle_id == latest_session_id:
-            to_pop = session
-
-    if to_pop is not None:
-        streaming_sessions.pop(to_pop)
+    if socket is not None:
+        streaming_sessions.pop(socket)
 
     return msg
 

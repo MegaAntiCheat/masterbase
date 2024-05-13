@@ -4,13 +4,14 @@ import os
 
 import pytest
 
-from masterbase.lib import DEMOS_PATH, generate_uuid4_int, make_db_uri, make_demo_path
+from masterbase.anomaly import DetectionState
+from masterbase.lib import DEMOS_PATH, DemoSessionManager, generate_uuid4_int, make_db_uri
 
 
 @pytest.fixture(scope="session")
-def session_id() -> int:
+def session_id() -> str:
     """Session ID fixture."""
-    return generate_uuid4_int()
+    return str(generate_uuid4_int())
 
 
 @pytest.fixture
@@ -37,5 +38,5 @@ def test_make_db_uri(mock_os_environ, is_async: bool, expected_uri: str) -> None
 
 def test_make_demo_path(session_id: str) -> None:
     """Test make demo path."""
-    actual = make_demo_path(session_id)
-    assert actual == os.path.join(DEMOS_PATH, f"{session_id}.dem")
+    manager = DemoSessionManager(session_id=session_id, detection_state=DetectionState())
+    assert manager.demo_path == os.path.join(DEMOS_PATH, f"{session_id}.dem")

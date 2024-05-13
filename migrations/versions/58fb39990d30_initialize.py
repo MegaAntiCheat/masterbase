@@ -59,6 +59,7 @@ def upgrade() -> None:
             demo_oid oid,
             demo_size integer,
             late_bytes bytea,
+            markov_score double precision,
             created_at timestamptz,
             updated_at timestamptz,
             PRIMARY KEY (session_id)
@@ -90,5 +91,6 @@ def downgrade() -> None:
         DROP TABLE api_keys;
         DROP TABLE beta_tester_steam_ids;
         DROP TABLE analyst_steam_ids;
+        DROP TABLE losers;
         """
     )
