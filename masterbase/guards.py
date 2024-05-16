@@ -3,9 +3,10 @@
 from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers.base import BaseRouteHandler
+from sourceserver.sourceserver import SourceError
 
 from masterbase.lib import check_analyst, check_is_active, check_key_exists, session_closed, steam_id_from_api_key
-from masterbase.steam import Server, get_ip_as_integer, get_steam_api_key
+from masterbase.steam import Server, get_ip_as_integer, get_steam_api_key, a2s_server_query
 
 
 def _development_feature_flag(connection: ASGIConnection) -> bool:
@@ -84,4 +85,7 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
     try:
         Server.query_from_params(api_key, converted_fake_ip, fake_port)
     except KeyError:
-        raise NotAuthorizedException("Cannot accept data from a non-existent gameserver!")
+        try:
+            a2s_server_query(converted_fake_ip, fake_port)
+        except SourceError:
+            raise NotAuthorizedException("Cannot accept data from a non-existent gameserver!")

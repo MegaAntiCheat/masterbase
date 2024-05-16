@@ -7,6 +7,7 @@ from typing import Any
 import requests
 import toml
 from pydantic import BaseModel
+from sourceserver.sourceserver import SourceServer
 
 STEAM_API_KEY_KEYNAME = "STEAM_API_KEY"
 
@@ -79,27 +80,27 @@ class Filters:
     )
 
     def __init__(
-        self,
-        dedicated: bool | None = None,
-        secure: bool | None = None,
-        gamedir: str | None = None,
-        mapname: str | None = None,  # inconsistency here because polluted namespace with python `map`
-        linux: bool | None = None,
-        password: bool | None = None,
-        empty: bool | None = None,
-        full: bool | None = None,
-        proxy: bool | None = None,
-        appid: int | None = None,
-        napp: int | None = None,
-        noplayers: bool | None = None,
-        white: bool | None = None,
-        gametype: list[str] | str | None = None,
-        gamedata: list[str] | str | None = None,
-        gamedataor: list[str] | str | None = None,
-        name_match: str | None = None,
-        version_match: str | None = None,
-        collapse_addr_hash: bool | None = None,
-        gameaddr: str | None = None,
+            self,
+            dedicated: bool | None = None,
+            secure: bool | None = None,
+            gamedir: str | None = None,
+            mapname: str | None = None,  # inconsistency here because polluted namespace with python `map`
+            linux: bool | None = None,
+            password: bool | None = None,
+            empty: bool | None = None,
+            full: bool | None = None,
+            proxy: bool | None = None,
+            appid: int | None = None,
+            napp: int | None = None,
+            noplayers: bool | None = None,
+            white: bool | None = None,
+            gametype: list[str] | str | None = None,
+            gamedata: list[str] | str | None = None,
+            gamedataor: list[str] | str | None = None,
+            name_match: str | None = None,
+            version_match: str | None = None,
+            collapse_addr_hash: bool | None = None,
+            gameaddr: str | None = None,
     ) -> None:
         """Filter for the api.steampowered.com/IGameServersService/GetServerList/v1 endpoint.
 
@@ -222,7 +223,7 @@ class Filters:
 def get_ip_as_integer(ip: str) -> str:
     """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
     ip_parts = [int(part) for part in ip.split(".")]
-    return (ip_parts[0] * 256**3) + (ip_parts[1] * 256**2) + (ip_parts[2] * 256) + ip_parts[3]
+    return (ip_parts[0] * 256 ** 3) + (ip_parts[1] * 256 ** 2) + (ip_parts[2] * 256) + ip_parts[3]
 
 
 QUERY_TYPES: dict[int, str] = {
@@ -352,6 +353,10 @@ class Query:
         servers = [Server(**server) for server in response["servers"]]
 
         return servers
+
+
+def a2s_server_query(server_ip: str, server_port: int) -> SourceServer:
+    return SourceServer(f"{server_ip}:{server_port}")
 
 
 def is_limited_account(steam_id: str) -> bool:
