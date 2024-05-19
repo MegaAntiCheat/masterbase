@@ -3,6 +3,7 @@
 import json
 import os
 from typing import Any
+from ipaddress import IPv4Address, ip_address
 
 import requests
 import toml
@@ -220,7 +221,7 @@ class Filters:
         raise NotImplementedError
 
 
-def get_ip_as_integer(ip: str) -> str:
+def get_ip_as_integer(ip: str) -> int:
     """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
     ip_parts = [int(part) for part in ip.split(".")]
     return (ip_parts[0] * 256 ** 3) + (ip_parts[1] * 256 ** 2) + (ip_parts[2] * 256) + ip_parts[3]
@@ -267,17 +268,17 @@ class Server(BaseModel):
         return self.gametype.split(",")
 
     @property
-    def ip(self) -> str:
+    def ip(self) -> IPv4Address:
         """Property to return IP without port."""
-        return self.addr.split(":")[0]
+        return ip_address(self.addr.split(":")[0])
 
     @property
     def ip_as_integer(self) -> int:
         """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
-        return get_ip_as_integer(self.ip)
+        return get_ip_as_integer(str(self.ip))
 
     @staticmethod
-    def query_from_params(steam_api_key: str, fake_ip_as_integer: str, fake_port: str) -> dict[str, Any]:
+    def query_from_params(steam_api_key: str, fake_ip: IPv4Address, fake_port: int) -> dict[str, Any]:
         """Query for the server information using `QueryByFakeIP` endpoint.
 
         Note that we use `QueryByFakeIP` because of the steam datagram relay (SDR) protocol.
@@ -291,7 +292,7 @@ class Server(BaseModel):
 
         params: dict[str, str | int] = {
             "key": steam_api_key,
-            "fake_ip": fake_ip_as_integer,
+            "fake_ip": str(fake_ip),
             "fake_port": fake_port,
             "app_id": 440,
         }
@@ -305,7 +306,7 @@ class Server(BaseModel):
 
     def query(self, steam_api_key: str) -> dict[str, Any]:
         """Query from self."""
-        return Server.query_from_params(steam_api_key, self.ip_as_integer, self.gameport)
+        return Server.query_from_params(steam_api_key, self.ip, self.gameport)
 
 
 class Query:
@@ -327,13 +328,11 @@ class Query:
 
     def _query(self) -> dict[str, Any]:
         """Apply filters and query."""
-        params: dict[str, str | int] = {}
-
-        params["key"] = self.steam_api_key
-
         filters = Filters(**self.filters)
-
-        params["filter"] = filters.filter_string
+        params: dict[str, str | int] = {
+            "key": self.steam_api_key,
+            "filter": filters.filter_string
+        }
 
         if self.limit is not None:
             params["limit"] = self.limit
@@ -355,7 +354,7 @@ class Query:
         return servers
 
 
-def a2s_server_query(server_ip: str, server_port: int) -> SourceServer:
+def a2s_server_query(server_ip: IPv4Address, server_port: int) -> SourceServer:
     return SourceServer(f"{server_ip}:{server_port}")
 
 
