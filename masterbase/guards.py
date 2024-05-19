@@ -81,7 +81,7 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
 
     fake_ip = connection.query_params["fake_ip"]
     ip, fake_port = fake_ip.split(":")
-    converted_fake_ip: IPv4Address = ip_address(get_ip_as_integer(ip))
+    converted_fake_ip: IPv4Address = ip_address(ip)
     api_key = get_steam_api_key()
 
     try:
