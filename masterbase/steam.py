@@ -273,7 +273,7 @@ class Server(BaseModel):
         return ip_address(self.addr.split(":")[0])
 
     @property
-    def ip_as_integer(self) -> int:
+    def ip_as_integer(self) -> str:
         """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
         return get_ip_as_integer(str(self.ip))
 
