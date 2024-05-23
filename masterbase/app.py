@@ -24,6 +24,7 @@ from masterbase.lib import (
     DemoSessionManager,
     SocketManagerMapType,
     add_loser,
+    add_report,
     async_steam_id_from_api_key,
     check_is_active,
     check_is_loser,
@@ -138,6 +139,15 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
         "Content-Length": size,
     }
     return Stream(bytestream_generator, media_type=MediaType.TEXT, headers=headers)
+
+
+@post("/report", guards=[valid_key_guard])
+async def report_player(request: Request, api_key: str, session_id: str, target_steam_id: str):
+    """Add a player report."""
+    # TODO: currently performs no session verification or Steam ID validation/cross-verification.
+    engine = request.app.state.engine
+    add_report(engine, session_id, target_steam_id)
+    {"report_added": True}
 
 
 class DemoHandler(WebsocketListener):

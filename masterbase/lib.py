@@ -568,7 +568,8 @@ def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
 
 
 def add_loser(engine: Engine, steam_id: str) -> None:
-    """Determine if we have flagged account as a loser."""
+    """Add a new loser to the database."""
+    # see https://github.com/MegaAntiCheat/masterbase/issues/53
     with engine.connect() as conn:
         created_at = datetime.now().astimezone(timezone.utc).isoformat()
         updated_at = created_at
@@ -580,6 +581,24 @@ def add_loser(engine: Engine, steam_id: str) -> None:
                         :steam_id, :created_at, :updated_at);"""
             ),
             {"steam_id": steam_id, "created_at": created_at, "updated_at": updated_at},
+        )
+        conn.commit()
+
+
+def add_report(engine: Engine, target_steam_id: str, session_id: str | None) -> None:
+    """Submit a hackusation to the database."""
+    # TODO: Eventually we need to enforce more rigorous checks
+    with engine.connect() as conn:
+        created_at = datetime.now().astimezone(timezone.utc).isoformat()
+        conn.execute(
+            sa.text(
+                """INSERT INTO reports (
+                    session_id, target_steam_id, created_at
+                ) VALUES (
+                    :session_id, :target_steam_id, :created_at);
+                """
+            ),
+            {"target_steam_id": target_steam_id, "session_id": session_id, "created_at": created_at},
         )
         conn.commit()
 
