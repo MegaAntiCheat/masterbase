@@ -147,8 +147,11 @@ async def report_player(request: Request, api_key: str, session_id: str, target_
     """Add a player report."""
     # TODO: currently performs no session verification or Steam ID validation/cross-verification.
     engine = request.app.state.engine
-    add_report(engine, session_id, target_steam_id)
-    {"report_added": True}
+    try:
+        add_report(engine, session_id, target_steam_id)
+        return {"report_added": True}
+    except IntegrityError:
+        return {"report_added": False}
 
 
 class DemoHandler(WebsocketListener):
