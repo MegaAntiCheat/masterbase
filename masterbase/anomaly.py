@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 from pydantic import BaseModel, Field
 
-S_hat: NDArray = np.load(os.path.join("masterbase", "S_hat.npy"))
+S_hat: NDArray = np.load(os.path.join("data", "S_hat.npy"))
 
 
 def longest_zero_run(data: bytes) -> int:

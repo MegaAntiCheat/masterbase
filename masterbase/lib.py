@@ -355,6 +355,10 @@ def _close_session_with_demo(
         conn.commit()
 
 
+def get_latest_session_id(engine: Engine, steam_id: str) -> str:
+    return _get_latest_session_id(engine, steam_id)
+
+
 def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType) -> str:
     """Properly close a session and return a summary message.
 
