@@ -220,13 +220,6 @@ class Filters:
         """Add nand filter."""
         raise NotImplementedError
 
-
-def get_ip_as_integer(ip: str) -> int:
-    """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
-    ip_parts = [int(part) for part in ip.split(".")]
-    return (ip_parts[0] * 256 ** 3) + (ip_parts[1] * 256 ** 2) + (ip_parts[2] * 256) + ip_parts[3]
-
-
 QUERY_TYPES: dict[int, str] = {
     1: "ping_data",
     2: "players_data",
@@ -271,11 +264,6 @@ class Server(BaseModel):
     def ip(self) -> IPv4Address:
         """Property to return IP without port."""
         return ip_address(self.addr.split(":")[0])
-
-    @property
-    def ip_as_integer(self) -> int:
-        """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
-        return get_ip_as_integer(str(self.ip))
 
     @staticmethod
     def query_from_params(steam_api_key: str, fake_ip: IPv4Address, fake_port: int) -> dict[str, Any]:
