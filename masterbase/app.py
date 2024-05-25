@@ -10,6 +10,7 @@ import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Stream
+from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
 from masterbase.guards import (
@@ -142,7 +143,7 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
 
 
 @post("/report", guards=[valid_key_guard])
-async def report_player(request: Request, api_key: str, session_id: str, target_steam_id: str):
+async def report_player(request: Request, api_key: str, session_id: str, target_steam_id: str) -> dict[str, bool]:
     """Add a player report."""
     # TODO: currently performs no session verification or Steam ID validation/cross-verification.
     engine = request.app.state.engine
@@ -335,6 +336,7 @@ app = Litestar(
         late_bytes,
         demodata,
         list_demos,
+        report_player,
     ],
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
