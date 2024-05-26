@@ -151,7 +151,7 @@ async def report_player(request: Request, api_key: str, session_id: str, target_
         add_report(engine, session_id, target_steam_id)
         return {"report_added": True}
     except IntegrityError:
-        return {"report_added": False}
+        raise HTTPException(detail="Unknown `session_id`!", status_code=409)
 
 
 class DemoHandler(WebsocketListener):
