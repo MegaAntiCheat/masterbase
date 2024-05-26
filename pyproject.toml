@@ -18,6 +18,8 @@ dependencies = [
     "numpy>=1.26.4",
     "yara-x>=0.3.0",
     "pathlib>=1.0.1",
+    "sourceserver>=0.10.0",
+    "uvloop>=0.19.0",
 ]
 requires-python = ">=3.10,<3.13"
 readme = "README.md"

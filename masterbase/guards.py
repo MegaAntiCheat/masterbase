@@ -1,11 +1,13 @@
 """Guards for the application."""
+from ipaddress import ip_address, ip_network, IPv4Network, IPv4Address
 
 from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers.base import BaseRouteHandler
+from sourceserver.sourceserver import SourceError
 
 from masterbase.lib import check_analyst, check_is_active, check_key_exists, session_closed, steam_id_from_api_key
-from masterbase.steam import Server, get_ip_as_integer, get_steam_api_key
+from masterbase.steam import Server, get_steam_api_key, a2s_server_query
 
 
 def _development_feature_flag(connection: ASGIConnection) -> bool:
@@ -79,9 +81,15 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
 
     fake_ip = connection.query_params["fake_ip"]
     ip, fake_port = fake_ip.split(":")
-    converted_fake_ip = get_ip_as_integer(ip)
+    converted_fake_ip: IPv4Address = ip_address(ip)
     api_key = get_steam_api_key()
+
     try:
-        Server.query_from_params(api_key, converted_fake_ip, fake_port)
-    except KeyError:
+        # Optional: We could check for additional IP address properties here such as `is_global` or `is_private`
+        # All SDR-enabled servers report a link-local multicast IP address as the server IP.
+        if converted_fake_ip.is_link_local:
+            Server.query_from_params(api_key, converted_fake_ip, fake_port)
+        else:
+            a2s_server_query(converted_fake_ip, fake_port)
+    except (KeyError, SourceError):
         raise NotAuthorizedException("Cannot accept data from a non-existent gameserver!")

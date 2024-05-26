@@ -3,10 +3,12 @@
 import json
 import os
 from typing import Any
+from ipaddress import IPv4Address, ip_address
 
 import requests
 import toml
 from pydantic import BaseModel
+from sourceserver.sourceserver import SourceServer
 
 STEAM_API_KEY_KEYNAME = "STEAM_API_KEY"
 
@@ -79,27 +81,27 @@ class Filters:
     )
 
     def __init__(
-        self,
-        dedicated: bool | None = None,
-        secure: bool | None = None,
-        gamedir: str | None = None,
-        mapname: str | None = None,  # inconsistency here because polluted namespace with python `map`
-        linux: bool | None = None,
-        password: bool | None = None,
-        empty: bool | None = None,
-        full: bool | None = None,
-        proxy: bool | None = None,
-        appid: int | None = None,
-        napp: int | None = None,
-        noplayers: bool | None = None,
-        white: bool | None = None,
-        gametype: list[str] | str | None = None,
-        gamedata: list[str] | str | None = None,
-        gamedataor: list[str] | str | None = None,
-        name_match: str | None = None,
-        version_match: str | None = None,
-        collapse_addr_hash: bool | None = None,
-        gameaddr: str | None = None,
+            self,
+            dedicated: bool | None = None,
+            secure: bool | None = None,
+            gamedir: str | None = None,
+            mapname: str | None = None,  # inconsistency here because polluted namespace with python `map`
+            linux: bool | None = None,
+            password: bool | None = None,
+            empty: bool | None = None,
+            full: bool | None = None,
+            proxy: bool | None = None,
+            appid: int | None = None,
+            napp: int | None = None,
+            noplayers: bool | None = None,
+            white: bool | None = None,
+            gametype: list[str] | str | None = None,
+            gamedata: list[str] | str | None = None,
+            gamedataor: list[str] | str | None = None,
+            name_match: str | None = None,
+            version_match: str | None = None,
+            collapse_addr_hash: bool | None = None,
+            gameaddr: str | None = None,
     ) -> None:
         """Filter for the api.steampowered.com/IGameServersService/GetServerList/v1 endpoint.
 
@@ -218,13 +220,6 @@ class Filters:
         """Add nand filter."""
         raise NotImplementedError
 
-
-def get_ip_as_integer(ip: str) -> str:
-    """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
-    ip_parts = [int(part) for part in ip.split(".")]
-    return (ip_parts[0] * 256**3) + (ip_parts[1] * 256**2) + (ip_parts[2] * 256) + ip_parts[3]
-
-
 QUERY_TYPES: dict[int, str] = {
     1: "ping_data",
     2: "players_data",
@@ -266,17 +261,12 @@ class Server(BaseModel):
         return self.gametype.split(",")
 
     @property
-    def ip(self) -> str:
+    def ip(self) -> IPv4Address:
         """Property to return IP without port."""
-        return self.addr.split(":")[0]
-
-    @property
-    def ip_as_integer(self) -> int:
-        """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
-        return get_ip_as_integer(self.ip)
+        return ip_address(self.addr.split(":")[0])
 
     @staticmethod
-    def query_from_params(steam_api_key: str, fake_ip_as_integer: str, fake_port: str) -> dict[str, Any]:
+    def query_from_params(steam_api_key: str, fake_ip: IPv4Address, fake_port: int) -> dict[str, Any]:
         """Query for the server information using `QueryByFakeIP` endpoint.
 
         Note that we use `QueryByFakeIP` because of the steam datagram relay (SDR) protocol.
@@ -290,7 +280,7 @@ class Server(BaseModel):
 
         params: dict[str, str | int] = {
             "key": steam_api_key,
-            "fake_ip": fake_ip_as_integer,
+            "fake_ip": str(fake_ip),
             "fake_port": fake_port,
             "app_id": 440,
         }
@@ -304,7 +294,7 @@ class Server(BaseModel):
 
     def query(self, steam_api_key: str) -> dict[str, Any]:
         """Query from self."""
-        return Server.query_from_params(steam_api_key, self.ip_as_integer, self.gameport)
+        return Server.query_from_params(steam_api_key, self.ip, self.gameport)
 
 
 class Query:
@@ -326,13 +316,11 @@ class Query:
 
     def _query(self) -> dict[str, Any]:
         """Apply filters and query."""
-        params: dict[str, str | int] = {}
-
-        params["key"] = self.steam_api_key
-
         filters = Filters(**self.filters)
-
-        params["filter"] = filters.filter_string
+        params: dict[str, str | int] = {
+            "key": self.steam_api_key,
+            "filter": filters.filter_string
+        }
 
         if self.limit is not None:
             params["limit"] = self.limit
@@ -352,6 +340,10 @@ class Query:
         servers = [Server(**server) for server in response["servers"]]
 
         return servers
+
+
+def a2s_server_query(server_ip: IPv4Address, server_port: int) -> SourceServer:
+    return SourceServer(f"{server_ip}:{server_port}")
 
 
 def is_limited_account(steam_id: str) -> bool:
