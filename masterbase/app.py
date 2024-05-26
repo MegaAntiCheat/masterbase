@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 import requests
 import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
+from litestar.exceptions import HTTPException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Stream
 from sqlalchemy.exc import IntegrityError
