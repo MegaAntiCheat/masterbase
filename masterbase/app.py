@@ -8,8 +8,10 @@ from urllib.parse import urlencode
 import requests
 import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
+from litestar.exceptions import HTTPException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Stream
+from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
 from masterbase.guards import (
@@ -24,6 +26,7 @@ from masterbase.lib import (
     DemoSessionManager,
     SocketManagerMapType,
     add_loser,
+    add_report,
     async_steam_id_from_api_key,
     check_is_active,
     check_is_loser,
@@ -138,6 +141,18 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
         "Content-Length": size,
     }
     return Stream(bytestream_generator, media_type=MediaType.TEXT, headers=headers)
+
+
+@post("/report", guards=[valid_key_guard])
+async def report_player(request: Request, api_key: str, session_id: str, target_steam_id: str) -> dict[str, bool]:
+    """Add a player report."""
+    # TODO: currently performs no session verification or Steam ID validation/cross-verification.
+    engine = request.app.state.engine
+    try:
+        add_report(engine, session_id, target_steam_id)
+        return {"report_added": True}
+    except IntegrityError:
+        raise HTTPException(detail="Unknown `session_id`!", status_code=409)
 
 
 class DemoHandler(WebsocketListener):
@@ -325,6 +340,7 @@ app = Litestar(
         late_bytes,
         demodata,
         list_demos,
+        report_player,
     ],
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
