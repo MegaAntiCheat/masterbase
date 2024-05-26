@@ -56,13 +56,6 @@ logger = logging.getLogger(__name__)
 
 # use this to ensure client only has one open connection
 streaming_sessions: SocketManagerMapType = {}
-# Compiled YARA ruleset to scan uploaded data-sets with
-# See YARA-X py bindings: https://virustotal.github.io/yara-x/docs/api/python/
-y_compiler = yara_x.Compiler(relaxed_re_syntax=True)
-y_compiler.new_namespace("valhalla")
-with open(os.path.join('data', 'valhalla-rules.yar'), 'r', encoding='utf8') as h:
-    y_compiler.add_source(h.read())
-y_rules: yara_x.Rules = y_compiler.build()
 
 
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard, valid_session_guard], sync_to_thread=False)
@@ -107,13 +100,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     return {"closed_successfully": True}
 
 
-async def _collect_demo_chunks(_generator: AsyncGenerator[bytes, None]) -> bytes:
-    _result = b""
-    async for item in _generator:
-        _result += item
-    return _result
-
-@post("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard])
+@post("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
 def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str, bool]:
     """Add late bytes to a closed demo session.
 
@@ -125,27 +112,6 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     _late_bytes = bytes.fromhex(data["late_bytes"])
     steam_id = steam_id_from_api_key(engine, api_key)
     late_bytes_helper(engine, steam_id, _late_bytes, current_time)
-
-    try:
-        _session_id = get_latest_session_id(engine, steam_id)
-        _generator = _get_generator(engine, _session_id)
-        logger.info(f"Collecting Demo Chunks to perform scan...")
-        _bytes = _collect_demo_chunks(_generator)
-        logger.info(f"Scanning...")
-        _results = y_rules.scan(_bytes)
-        if len(_results.matching_rules) > 0:
-            logger.info("===============================================================")
-            logger.info(f"❌ YARA Rule match on Demo Session {_session_id}! ❌")
-            for match in _results.matching_rules:
-                logger.info(f"Matched: {match}")
-            logger.info("===============================================================")
-        else:
-            logger.info(f"✔ No matches found in file ✔")
-
-    except yara_x.ScanError as e:
-        logger.info(f"Encountered YARA scanning error attempting to scan the uploaded contents.\n{e}")
-    except Exception as e:
-        logger.info(f"Failed to perform YARA Scan due to: {e}")
 
     return {"late_bytes": True}
 
@@ -163,8 +129,10 @@ def list_demos(
     demos = list_demos_helper(engine, api_key, page_size, page_number)
     return demos
 
+
 def _get_generator(engine, _session_id) -> AsyncGenerator[bytes, None]:
     return demodata_helper(engine, _session_id)
+
 
 async def _get_demo_data(engine, _session_id) -> tuple[AsyncGenerator[bytes, None], str]:
     size = await get_demo_size(engine, _session_id)

@@ -7,11 +7,13 @@ import secrets
 from datetime import datetime, timezone
 from typing import IO, Any, AsyncGenerator
 from uuid import uuid4
+from pathlib import Path
 
 import sqlalchemy as sa
 from litestar import WebSocket
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
+from yara_x import yara_x
 
 from masterbase.anomaly import DetectionState
 
@@ -22,6 +24,14 @@ os.makedirs(DEMOS_PATH, exist_ok=True)
 
 LATE_BYTES_START = 0x420
 LATE_BYTES_END = 0x430
+
+# Compiled YARA ruleset to scan uploaded data-sets with
+# See YARA-X py bindings: https://virustotal.github.io/yara-x/docs/api/python/
+y_compiler = yara_x.Compiler(relaxed_re_syntax=True)
+y_compiler.new_namespace("valhalla")
+with open(os.path.join('data', 'valhalla-rules.yar'), 'r', encoding='utf8') as h:
+    y_compiler.add_source(h.read())
+y_rules: yara_x.Rules = y_compiler.build()
 
 
 def make_db_uri(is_async: bool = False) -> str:
@@ -389,6 +399,24 @@ def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: Sock
         msg = "No active session found, closing anyway."
     else:
         if os.path.exists(session_manager.demo_path):
+            try:
+                _bytes = Path(session_manager.demo_path).read_bytes()
+                logger.info(f"Performing YARA-X scan on uploaded demo from {steam_id}@{current_time.isoformat()}.")
+                _results = y_rules.scan(_bytes)
+                if len(_results.matching_rules) > 0:
+                    logger.info("===============================================================")
+                    logger.info(f"❌ YARA Rule match on Demo Session {latest_session_id}! ❌")
+                    for match in _results.matching_rules:
+                        logger.info(f"Matched: {match}")
+                    logger.info("===============================================================")
+                else:
+                    logger.info(f"✔ No matches found in file ✔")
+
+            except yara_x.ScanError as e:
+                logger.info(f"Encountered YARA scanning error attempting to scan the uploaded contents.\n{e}")
+            except Exception as e:
+                logger.info(f"Failed to perform YARA Scan due to: {e}")
+
             _close_session_with_demo(
                 engine,
                 steam_id,
