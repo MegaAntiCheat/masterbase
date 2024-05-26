@@ -5,7 +5,7 @@
 groups = ["default", "dev"]
 strategy = ["cross_platform"]
 lock_version = "4.4.1"
-content_hash = "sha256:df98ea4259197262441c40fafc829bf356d14f8b4b5805bf6c158a3ffda0cc00"
+content_hash = "sha256:9e9abf62da68d5b262adfb522560821b8bce4bb5e63a4b8b991f8e2daac7685a"
 
 [[package]]
 name = "alembic"
@@ -998,6 +998,15 @@ summary = "Sniff out which async library your code is running under"
 files = [
     {file = "sniffio-1.3.1-py3-none-any.whl", hash = "sha256:2f6da418d1f1e0fddd844478f41680e794e6051915791a034ff65e5f100525a2"},
     {file = "sniffio-1.3.1.tar.gz", hash = "sha256:f4324edc670a0f49750a81b895f35c3adb843cca46f0530f79fc1babb23789dc"},
+]
+
+[[package]]
+name = "sourceserver"
+version = "0.10.0"
+summary = "Query Source engine servers over UDP"
+files = [
+    {file = "sourceserver-0.10.0-py3-none-any.whl", hash = "sha256:76a05da43a66fd710041c5b58225a83b17833ef7f35dfd89cff2656962be2ee7"},
+    {file = "sourceserver-0.10.0.tar.gz", hash = "sha256:00f13edbe04ebb28c60592aea6c2c48a0c402c14a983c6076a0a3bf38523df2f"},
 ]
 
 [[package]]
