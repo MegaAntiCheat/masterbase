@@ -1,13 +1,18 @@
 """Guards for the application."""
-from ipaddress import ip_address, ip_network, IPv4Network, IPv4Address
+import logging
+from typing import Optional, Any
+from ipaddress import ip_address, IPv4Address
 
 from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers.base import BaseRouteHandler
-from sourceserver.sourceserver import SourceError
+from sourceserver.sourceserver import SourceError, SourceServer
 
 from masterbase.lib import check_analyst, check_is_active, check_key_exists, session_closed, steam_id_from_api_key
 from masterbase.steam import Server, get_steam_api_key, a2s_server_query
+
+
+logger = logging.getLogger(__name__)
 
 
 def _development_feature_flag(connection: ASGIConnection) -> bool:
@@ -74,6 +79,40 @@ async def session_closed_guard(connection: ASGIConnection, _: BaseRouteHandler) 
         raise PermissionDeniedException(detail="Session is still active, cannot retrieve data!")
 
 
+def _perform_server_queries(
+        proposed_ip: IPv4Address,
+        proposed_port: int,
+        api_key: str,
+        *,
+        invert_selection: bool = False
+) -> Optional[SourceServer | dict[str, Any] | Exception]:
+    _result = None
+    _exception = None
+    try:
+        # Optional: We could check for additional IP address properties here such as `is_global` or `is_private`
+        # All SDR-enabled servers report a link-local multicast IP address as the server IP.
+        if proposed_ip.is_link_local and not invert_selection:
+            logging.info(f"Querying for gameserver on {proposed_ip} by FakeIP API endpoint.")
+            _result = Server.query_from_params(api_key, proposed_ip, proposed_port)
+        else:
+            logging.info(f"Querying gameserver on {proposed_ip} directly using A2S.")
+            _result = a2s_server_query(proposed_ip, proposed_port)
+    except (KeyError, SourceError):
+        _exception = NotAuthorizedException("Cannot accept data from a non-existent gameserver!")
+        logger.info("No appropriate response from game server")
+    finally:
+        # One last attempt at grabbing a result by performing the opposite query to see if the server talks
+        if _result is None and not invert_selection:
+            logger.info("(Attempt 2/2) Trying alternate query method")
+            temp = _perform_server_queries(proposed_ip, proposed_port, api_key, invert_selection=True)
+            if isinstance(temp, (Exception, SourceError)):
+                _exception = temp
+            elif isinstance(temp, (SourceServer, dict)):
+                _result = temp
+
+    return _result if _result is not None else _exception
+
+
 async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
     """Validate session data is from a server we can check exists."""
     if _development_feature_flag(connection):
@@ -84,12 +123,8 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
     converted_fake_ip: IPv4Address = ip_address(ip)
     api_key = get_steam_api_key()
 
-    try:
-        # Optional: We could check for additional IP address properties here such as `is_global` or `is_private`
-        # All SDR-enabled servers report a link-local multicast IP address as the server IP.
-        if converted_fake_ip.is_link_local:
-            Server.query_from_params(api_key, converted_fake_ip, fake_port)
-        else:
-            a2s_server_query(converted_fake_ip, fake_port)
-    except (KeyError, SourceError):
-        raise NotAuthorizedException("Cannot accept data from a non-existent gameserver!")
+    _resp = _perform_server_queries(converted_fake_ip, fake_port, api_key)
+    if isinstance(_resp, (Exception, SourceError)):
+        raise _resp
+    else:
+        logger.info(f"Confirmed valid session.")

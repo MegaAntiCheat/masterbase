@@ -52,8 +52,6 @@ from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import is_limited_account
 
 logger = logging.getLogger(__name__)
-
-
 # use this to ensure client only has one open connection
 streaming_sessions: SocketManagerMapType = {}
 

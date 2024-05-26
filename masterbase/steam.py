@@ -2,6 +2,7 @@
 
 import json
 import os
+import logging
 from typing import Any
 from ipaddress import IPv4Address, ip_address
 
@@ -10,7 +11,9 @@ import toml
 from pydantic import BaseModel
 from sourceserver.sourceserver import SourceServer
 
+
 STEAM_API_KEY_KEYNAME = "STEAM_API_KEY"
+logger = logging.getLogger(__name__)
 
 
 def get_steam_api_key(path_or_env_var_name: str | None = STEAM_API_KEY_KEYNAME) -> str:
@@ -288,7 +291,10 @@ class Server(BaseModel):
             params["query_type"] = query_type
 
             response = requests.get(URL, params)
-            server_data[query_key] = response.json()["response"][query_key]
+            logger.info(f"Query to {URL} -> response {response.status_code}")
+            _response_json = response.json()
+            logger.info(f"Query to {URL} -> contents {str(_response_json)[:32]}...")
+            server_data[query_key] = _response_json["response"][query_key]
 
         return server_data
 
