@@ -256,12 +256,16 @@ def provision_handler(request: Request) -> str:
         Page of HTML for user.
     """
     data = request.query_params
-    validation_args = {
-        "openid.assoc_handle": data["openid.assoc_handle"],
-        "openid.signed": data["openid.signed"],
-        "openid.sig": data["openid.sig"],
-        "openid.ns": data["openid.ns"],
-    }
+    # KeyError thrown when someone navigates here without a redirect from /provision...
+    try:
+        validation_args = {
+            "openid.assoc_handle": data["openid.assoc_handle"],
+            "openid.signed": data["openid.signed"],
+            "openid.sig": data["openid.sig"],
+            "openid.ns": data["openid.ns"],
+        }
+    except KeyError:
+        return "<span>You aren't supposed to be here!</span>"
 
     signed_args = data["openid.signed"].split(",")
     for item in signed_args:
