@@ -50,7 +50,7 @@ from masterbase.lib import (
     update_api_key,
 )
 from masterbase.registers import shutdown_registers, startup_registers
-from masterbase.steam import account_exists, is_limited_account
+from masterbase.steam import is_limited_account
 
 logger = logging.getLogger(__name__)
 
