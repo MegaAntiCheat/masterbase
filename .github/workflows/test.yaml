@@ -1,3 +1,10 @@
+name: Python Test
+
+on:
+  pull_request:
+    branches:
+      - main
+
 jobs:
   tests:
     runs-on: ubuntu-latest
