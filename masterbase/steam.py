@@ -219,7 +219,7 @@ class Filters:
         raise NotImplementedError
 
 
-def get_ip_as_integer(ip: str) -> str:
+def get_ip_as_integer(ip: str) -> int:
     """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
     ip_parts = [int(part) for part in ip.split(".")]
     return (ip_parts[0] * 256**3) + (ip_parts[1] * 256**2) + (ip_parts[2] * 256) + ip_parts[3]
@@ -276,7 +276,7 @@ class Server(BaseModel):
         return get_ip_as_integer(self.ip)
 
     @staticmethod
-    def query_from_params(steam_api_key: str, fake_ip_as_integer: str, fake_port: str) -> dict[str, Any]:
+    def query_from_params(steam_api_key: str, fake_ip_as_integer: int, fake_port: str | int) -> dict[str, Any]:
         """Query for the server information using `QueryByFakeIP` endpoint.
 
         Note that we use `QueryByFakeIP` because of the steam datagram relay (SDR) protocol.
