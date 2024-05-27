@@ -372,7 +372,12 @@ def player_summary(steam_id: str) -> dict[str, str | int] | None:
 
 
 def is_limited_account(steam_id: str) -> bool:
-    """Determine if an account is limited or not."""
+    """Determine if an account is limited or not.
+
+    False if the player does not exist.
+    """
+    if not account_exists(steam_id):
+        return False
     player = player_summary(steam_id)
     limited = not bool(player.get("profilestate", False))
     return limited
