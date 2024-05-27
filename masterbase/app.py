@@ -21,6 +21,7 @@ from masterbase.guards import (
     user_not_in_session_guard,
     valid_key_guard,
     valid_session_guard,
+    valid_target_guard,
 )
 from masterbase.lib import (
     DemoSessionManager,
@@ -49,7 +50,7 @@ from masterbase.lib import (
     update_api_key,
 )
 from masterbase.registers import shutdown_registers, startup_registers
-from masterbase.steam import is_limited_account
+from masterbase.steam import account_exists, is_limited_account
 
 logger = logging.getLogger(__name__)
 
@@ -143,10 +144,9 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     return Stream(bytestream_generator, media_type=MediaType.TEXT, headers=headers)
 
 
-@post("/report", guards=[valid_key_guard])
+@post("/report", guards=[valid_key_guard, valid_target_guard])
 async def report_player(request: Request, api_key: str, session_id: str, target_steam_id: str) -> dict[str, bool]:
     """Add a player report."""
-    # TODO: currently performs no session verification or Steam ID validation/cross-verification.
     engine = request.app.state.engine
     try:
         add_report(engine, session_id, target_steam_id)
@@ -256,16 +256,12 @@ def provision_handler(request: Request) -> str:
         Page of HTML for user.
     """
     data = request.query_params
-    # KeyError thrown when someone navigates here without a redirect from /provision...
-    try:
-        validation_args = {
-            "openid.assoc_handle": data["openid.assoc_handle"],
-            "openid.signed": data["openid.signed"],
-            "openid.sig": data["openid.sig"],
-            "openid.ns": data["openid.ns"],
-        }
-    except KeyError:
-        return "<span>You aren't supposed to be here!</span>"
+    validation_args = {
+        "openid.assoc_handle": data["openid.assoc_handle"],
+        "openid.signed": data["openid.signed"],
+        "openid.sig": data["openid.sig"],
+        "openid.ns": data["openid.ns"],
+    }
 
     signed_args = data["openid.signed"].split(",")
     for item in signed_args:
