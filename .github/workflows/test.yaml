@@ -31,6 +31,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pdm
 
+      - name: Install dependencies
+        run: pdm sync -G:all
+
       - name: Run tests
         run: pdm run pytest
 
