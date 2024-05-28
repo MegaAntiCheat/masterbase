@@ -281,7 +281,7 @@ class Server(BaseModel):
         return get_ip_as_integer(self.ip)
 
     @staticmethod
-    def query_from_params(steam_api_key: str, fake_ip_as_integer: str, fake_port: str) -> dict[str, Any]:
+    def query_from_params(steam_api_key: str, fake_ip_as_integer: int, fake_port: str | int) -> dict[str, Any]:
         """Query for the server information using `QueryByFakeIP` endpoint.
 
         Note that we use `QueryByFakeIP` because of the steam datagram relay (SDR) protocol.
