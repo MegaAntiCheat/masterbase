@@ -360,7 +360,7 @@ class Query:
 
 
 @cache
-def player_summary(steam_id: str) -> dict[str, str | int] | None:
+def player_summary(steam_id: str) -> dict[str, str | int]:
     """Retrieve a player summary."""
     url = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2"
     params = {"key": get_steam_api_key(), "steamids": steam_id}
@@ -368,7 +368,7 @@ def player_summary(steam_id: str) -> dict[str, str | int] | None:
     if len(response["response"]["players"]) > 0:
         return response["response"]["players"][0]
     else:
-        return None
+        return {}
 
 
 def is_limited_account(steam_id: str) -> bool:
@@ -385,5 +385,4 @@ def is_limited_account(steam_id: str) -> bool:
 
 def account_exists(steam_id: str) -> bool:
     """Determine if an account exists or not."""
-    player = player_summary(steam_id)
-    return player is not None
+    return bool(player_summary(steam_id))
