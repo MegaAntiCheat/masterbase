@@ -71,7 +71,7 @@ def test_get_steam_api_key(steam_id: str, tmpdir: os.PathLike) -> None:
         get_steam_api_key(key_location)
 
 
-def test_serialize_ip_as_int(int_32: int) -> int:
+def test_serialize_ip_as_int(int_32: int) -> None:
     """Test ``get_ip_as_integer``."""
     ip_str = ".".join(f"{b}" for b in int_32.to_bytes(4, "big"))
     assert int_32 == get_ip_as_integer(ip_str)
