@@ -89,5 +89,7 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
 
 async def valid_target_guard(connection: ASGIConnection, _: BaseRouteHandler):
     """Verify the existence of a target_steam_id."""
-    params = connection.query_params
-    return account_exists(params["target_steam_id"])
+    target_steam_id = connection.query_params["target_steam_id"]
+    exists = account_exists(target_steam_id)
+    if not exists:
+        raise PermissionDeniedException(detail="Unknown target_steam_id!")
