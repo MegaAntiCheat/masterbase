@@ -2,19 +2,26 @@
 
 import json
 import os
+import random
 from typing import Any
 from uuid import uuid4
 
 import pytest
 import toml
 
-from masterbase.steam import STEAM_API_KEY_KEYNAME, Filters, get_steam_api_key
+from masterbase.steam import STEAM_API_KEY_KEYNAME, Filters, get_ip_as_integer, get_steam_api_key
 
 
 @pytest.fixture(scope="session")
 def steam_id() -> str:
     """Random session-scoped Steam ID."""
     return str(uuid4().int)
+
+
+@pytest.fixture(scope="session")
+def int_32() -> int:
+    """Random session-scoped int32."""
+    return random.getrandbits(32)
 
 
 def write_json_steam_id(steam_id: str, tmpdir: os.PathLike) -> str:
@@ -45,7 +52,7 @@ def write_environment_steam_id(steam_id: str) -> str:
 
 
 def test_get_steam_api_key(steam_id: str, tmpdir: os.PathLike) -> None:
-    """Test thhe ``get_steam_api_key`` function."""
+    """Test the ``get_steam_api_key`` function."""
     # test json
     key_location = write_json_steam_id(steam_id, tmpdir)
     assert get_steam_api_key(key_location) == steam_id
@@ -62,6 +69,12 @@ def test_get_steam_api_key(steam_id: str, tmpdir: os.PathLike) -> None:
         key_location = write_environment_steam_id(steam_id)
         os.environ.pop(STEAM_API_KEY_KEYNAME)
         get_steam_api_key(key_location)
+
+
+def test_serialize_ip_as_int(int_32: int) -> None:
+    """Test ``get_ip_as_integer``."""
+    ip_str = ".".join(f"{b}" for b in int_32.to_bytes(4, "big"))
+    assert int_32 == get_ip_as_integer(ip_str)
 
 
 @pytest.mark.parametrize("value,expected", [(True, 1), (False, 0), (None, None)])

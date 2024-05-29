@@ -2,8 +2,10 @@
 
 import json
 import os
+from functools import cache
 from typing import Any
 
+import numpy as np
 import requests
 import toml
 from pydantic import BaseModel
@@ -220,9 +222,12 @@ class Filters:
 
 
 def get_ip_as_integer(ip: str) -> int:
-    """Get the fake IP for a server. Wack math from ChatGPT and @Saghetti."""
-    ip_parts = [int(part) for part in ip.split(".")]
-    return (ip_parts[0] * 256**3) + (ip_parts[1] * 256**2) + (ip_parts[2] * 256) + ip_parts[3]
+    """Get the fake IP for a server as a word.
+
+    Wack math from ChatGPT and @Saghetti.
+    """
+    ip_parts = np.array([int(part) for part in ip.split(".")])
+    return int(np.bitwise_or.reduce(ip_parts << np.arange(24, -1, -8)))
 
 
 QUERY_TYPES: dict[int, str] = {
@@ -354,12 +359,30 @@ class Query:
         return servers
 
 
-def is_limited_account(steam_id: str) -> bool:
-    """Determine if an account is limited or not."""
+@cache
+def player_summary(steam_id: str) -> dict[str, str | int]:
+    """Retrieve a player summary."""
     url = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2"
     params = {"key": get_steam_api_key(), "steamids": steam_id}
     response = requests.get(url, params).json()
-    player_data = response["response"]["players"][0]
-    limited = not bool(player_data.get("profilestate", False))
+    if len(response["response"]["players"]) > 0:
+        return response["response"]["players"][0]
+    else:
+        return {}
 
+
+def is_limited_account(steam_id: str) -> bool:
+    """Determine if an account is limited or not.
+
+    False if the player does not exist.
+    """
+    if not account_exists(steam_id):
+        return False
+    player = player_summary(steam_id)
+    limited = not bool(player.get("profilestate", False))
     return limited
+
+
+def account_exists(steam_id: str) -> bool:
+    """Determine if an account exists or not."""
+    return bool(player_summary(steam_id))
