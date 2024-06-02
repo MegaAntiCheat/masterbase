@@ -4,15 +4,8 @@ from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers.base import BaseRouteHandler
 
-from masterbase.lib import (
-    check_analyst,
-    check_is_active,
-    check_key_exists,
-    resolve_hostname,
-    session_closed,
-    steam_id_from_api_key,
-)
-from masterbase.steam import Query, Server, get_ip_as_integer, get_steam_api_key
+from masterbase.lib import check_analyst, check_is_active, check_key_exists, session_closed, steam_id_from_api_key
+from masterbase.steam import Server, get_ip_as_integer, get_steam_api_key
 
 
 def _development_feature_flag(connection: ASGIConnection) -> bool:
@@ -84,22 +77,11 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
     if _development_feature_flag(connection):
         return
 
-    api_key = get_steam_api_key()
     fake_ip = connection.query_params["fake_ip"]
-
-    to_resolve, port = fake_ip.split(":")
-    fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
-
-    # 169 servers are behind SDR...
-    if fake_ip.startswith("169"):
-        ip, fake_port = fake_ip.split(":")
-        converted_fake_ip = get_ip_as_integer(ip)
-        try:
-            Server.query_from_params(api_key, converted_fake_ip, fake_port)
-        except KeyError:
-            raise NotAuthorizedException(f"Cannot accept data from a non-existent gameserver! ({fake_ip})")
-    else:
-        query = Query(api_key, {"gameaddr": fake_ip})
-        servers = query.query()
-        if not servers:
-            raise NotAuthorizedException(f"Cannot accept data from a non-existent gameserver! ({fake_ip})")
+    ip, fake_port = fake_ip.split(":")
+    converted_fake_ip = get_ip_as_integer(ip)
+    api_key = get_steam_api_key()
+    try:
+        Server.query_from_params(api_key, converted_fake_ip, fake_port)
+    except KeyError:
+        raise NotAuthorizedException("Cannot accept data from a non-existent gameserver!")
