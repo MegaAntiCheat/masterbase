@@ -9,7 +9,7 @@ class ReportBody(BaseModel):
     """Report model for report post request body."""
 
     session_id: str
-    target_steam_id: int
+    target_steam_id: str
 
 
 class LateBytesBody(BaseModel):
