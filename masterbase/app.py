@@ -116,17 +116,31 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
     return {"late_bytes": True}
 
 
-@get("/list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def list_demos(
+@get("/analyst_list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+def analyst_list_demos(
     request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
 ) -> list[dict[str, str]]:
-    """List demo data."""
+    """List all demo data."""
     if page_size is None or page_size >= 50 or page_size < 1:
         page_size = 50
     if page_number is None or page_number < 1:
         page_number = 1
     engine = request.app.state.engine
-    demos = list_demos_helper(engine, api_key, page_size, page_number)
+    demos = list_demos_helper(engine, api_key, page_size, page_number, analyst=True)
+    return demos
+
+
+@get("/list_demos", guards=[valid_key_guard], sync_to_thread=False)
+def list_demos(
+    request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
+) -> list[dict[str, str]]:
+    """List demo data for user with `api_key`."""
+    if page_size is None or page_size >= 50 or page_size < 1:
+        page_size = 50
+    if page_number is None or page_number < 1:
+        page_number = 1
+    engine = request.app.state.engine
+    demos = list_demos_helper(engine, api_key, page_size, page_number, analyst=False)
     return demos
 
 
@@ -347,6 +361,7 @@ app = Litestar(
         late_bytes,
         demodata,
         list_demos,
+        analyst_list_demos,
         report_player,
     ],
     on_shutdown=shutdown_registers,

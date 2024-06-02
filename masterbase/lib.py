@@ -490,17 +490,25 @@ async def demodata_helper(engine: AsyncEngine, session_id: str) -> AsyncGenerato
                 yield bytestream
 
 
-def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number: int) -> list[dict[str, Any]]:
-    """List all demos in the DB for a user with pagination."""
+def list_demos_helper(
+    engine: Engine, api_key: str, page_size: int, page_number: int, analyst: bool
+) -> list[dict[str, Any]]:
+    """List demos in the DB for a user with pagination."""
+    requester_steam_id = steam_id_from_api_key(engine, api_key)
     offset = (page_number - 1) * page_size
+    params: dict[str, Any] = {"page_size": page_size, "offset": offset}
+    where = "active = false"
+    if not analyst:
+        where = f"{where} AND steam_id = :steam_id"
+        params["steam_id"] = requester_steam_id
 
-    sql = """
+    sql = f"""
     SELECT
         steam_id, demo_name, session_id, map, start_time, end_time, demo_size
     FROM
         demo_sessions
     WHERE
-        active = false
+        {where}
     ORDER BY
         start_time
     LIMIT :page_size OFFSET :offset
@@ -508,10 +516,9 @@ def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number:
     """
 
     with engine.connect() as conn:
-        data = conn.execute(sa.text(sql), {"page_size": page_size, "offset": offset})
+        data = conn.execute(sa.text(sql), params)
 
     rows = [row._asdict() for row in data.all()]
-    requester_steam_id = steam_id_from_api_key(engine, api_key)
     # modify in place
     for row in rows:
         demo_steam_id = row["steam_id"]
