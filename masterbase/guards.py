@@ -87,9 +87,6 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
     api_key = get_steam_api_key()
     fake_ip = connection.query_params["fake_ip"]
 
-    to_resolve, port = fake_ip.split(":")
-    fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
-
     # 169 servers are behind SDR...
     if fake_ip.startswith("169"):
         ip, fake_port = fake_ip.split(":")
@@ -99,6 +96,8 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
         except KeyError:
             raise NotAuthorizedException(f"Cannot accept data from a non-existent gameserver! ({fake_ip})")
     else:
+        to_resolve, port = fake_ip.split(":")
+        fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
         query = Query(api_key, {"gameaddr": fake_ip})
         servers = query.query()
         if not servers:

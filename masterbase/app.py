@@ -248,7 +248,7 @@ def provision(request: Request) -> Redirect:
     """
     # enforce https on base_url
     base_url = str(request.base_url)
-    if not base_url.startswith("https") and not os.environ["DEVELOPMENT"]:
+    if not base_url.startswith("https"):
         base_url = base_url.replace("http", "https")
 
     auth_params = {
