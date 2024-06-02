@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 import secrets
+import socket
 from datetime import datetime, timezone
 from typing import IO, Any, AsyncGenerator
 from uuid import uuid4
@@ -22,6 +23,11 @@ os.makedirs(DEMOS_PATH, exist_ok=True)
 
 LATE_BYTES_START = 0x420
 LATE_BYTES_END = 0x430
+
+
+def resolve_hostname(hosthame: str) -> str:
+    """Resolve a hostname to an IP."""
+    return socket.gethostbyname(hosthame)
 
 
 def make_db_uri(is_async: bool = False) -> str:
@@ -490,26 +496,35 @@ async def demodata_helper(engine: AsyncEngine, session_id: str) -> AsyncGenerato
                 yield bytestream
 
 
-def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number: int) -> list[dict[str, Any]]:
-    """List all demos in the DB for a user with pagination."""
+def list_demos_helper(
+    engine: Engine, api_key: str, page_size: int, page_number: int, analyst: bool
+) -> list[dict[str, Any]]:
+    """List demos in the DB for a user with pagination."""
+    requester_steam_id = steam_id_from_api_key(engine, api_key)
     offset = (page_number - 1) * page_size
+    params: dict[str, Any] = {"page_size": page_size, "offset": offset}
+    where = "active = false"
+    if not analyst:
+        where = f"{where} AND steam_id = :steam_id"
+        params["steam_id"] = requester_steam_id
 
-    sql = """
+    sql = f"""
     SELECT
         steam_id, demo_name, session_id, map, start_time, end_time, demo_size
     FROM
         demo_sessions
     WHERE
-        active = false
+        {where}
+    ORDER BY
+        start_time
     LIMIT :page_size OFFSET :offset
     ;
     """
 
     with engine.connect() as conn:
-        data = conn.execute(sa.text(sql), {"page_size": page_size, "offset": offset})
+        data = conn.execute(sa.text(sql), params)
 
     rows = [row._asdict() for row in data.all()]
-    requester_steam_id = steam_id_from_api_key(engine, api_key)
     # modify in place
     for row in rows:
         demo_steam_id = row["steam_id"]
@@ -585,7 +600,7 @@ def add_loser(engine: Engine, steam_id: str) -> None:
         conn.commit()
 
 
-def add_report(engine: Engine, target_steam_id: str, session_id: str | None) -> None:
+def add_report(engine: Engine, session_id: str, target_steam_id: str | None) -> None:
     """Submit a hackusation to the database."""
     # TODO: Eventually we need to enforce more rigorous checks
     with engine.connect() as conn:
