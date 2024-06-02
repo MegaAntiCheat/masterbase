@@ -8,7 +8,7 @@ from urllib.parse import urlencode
 import requests
 import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
-from litestar.exceptions import HTTPException
+from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Stream
 from sqlalchemy.exc import IntegrityError
@@ -21,7 +21,6 @@ from masterbase.guards import (
     user_not_in_session_guard,
     valid_key_guard,
     valid_session_guard,
-    valid_target_guard,
 )
 from masterbase.lib import (
     DemoSessionManager,
@@ -50,7 +49,7 @@ from masterbase.lib import (
     update_api_key,
 )
 from masterbase.registers import shutdown_registers, startup_registers
-from masterbase.steam import is_limited_account
+from masterbase.steam import account_exists, is_limited_account
 
 logger = logging.getLogger(__name__)
 
@@ -144,10 +143,16 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     return Stream(bytestream_generator, media_type=MediaType.TEXT, headers=headers)
 
 
-@post("/report", guards=[valid_key_guard, valid_target_guard])
-async def report_player(request: Request, api_key: str, session_id: str, target_steam_id: str) -> dict[str, bool]:
+@post("/report", guards=[valid_key_guard])
+async def report_player(request: Request, api_key: str, data: dict[str, str]) -> dict[str, bool]:
     """Add a player report."""
     engine = request.app.state.engine
+    session_id = data["session_id"]
+    target_steam_id = data["target_steam_id"]
+
+    exists = account_exists(target_steam_id)
+    if not exists:
+        raise PermissionDeniedException(detail="Unknown target_steam_id!")
     try:
         add_report(engine, session_id, target_steam_id)
         return {"report_added": True}

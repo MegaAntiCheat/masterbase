@@ -5,7 +5,7 @@ from litestar.exceptions import NotAuthorizedException, PermissionDeniedExceptio
 from litestar.handlers.base import BaseRouteHandler
 
 from masterbase.lib import check_analyst, check_is_active, check_key_exists, session_closed, steam_id_from_api_key
-from masterbase.steam import Server, account_exists, get_ip_as_integer, get_steam_api_key
+from masterbase.steam import Server, get_ip_as_integer, get_steam_api_key
 
 
 def _development_feature_flag(connection: ASGIConnection) -> bool:
@@ -85,11 +85,3 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
         Server.query_from_params(api_key, converted_fake_ip, fake_port)
     except KeyError:
         raise NotAuthorizedException("Cannot accept data from a non-existent gameserver!")
-
-
-async def valid_target_guard(connection: ASGIConnection, _: BaseRouteHandler):
-    """Verify the existence of a target_steam_id."""
-    target_steam_id = connection.query_params["target_steam_id"]
-    exists = account_exists(target_steam_id)
-    if not exists:
-        raise PermissionDeniedException(detail="Unknown target_steam_id!")
