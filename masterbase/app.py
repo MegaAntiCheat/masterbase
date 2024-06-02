@@ -3,7 +3,7 @@
 import logging
 import os
 from datetime import datetime, timezone
-from urllib.parse import urlencode
+from urllib.parse import unquote, urlencode
 
 import requests
 import uvicorn
@@ -81,8 +81,11 @@ def session_id(
     _session_id = generate_uuid4_int()
     engine = request.app.state.engine
     steam_id = steam_id_from_api_key(engine, api_key)
-    to_resolve, port = fake_ip.split(":")
-    fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
+
+    fake_ip = unquote(fake_ip)
+    if not fake_ip.startswith("169"):
+        to_resolve, port = fake_ip.split(":")
+        fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
     start_session_helper(engine, steam_id, str(_session_id), demo_name, fake_ip, map)
 
     return {"session_id": _session_id}

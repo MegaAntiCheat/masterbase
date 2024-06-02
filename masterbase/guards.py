@@ -1,5 +1,7 @@
 """Guards for the application."""
 
+from urllib.parse import unquote
+
 from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers.base import BaseRouteHandler
@@ -85,7 +87,7 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
         return
 
     api_key = get_steam_api_key()
-    fake_ip = connection.query_params["fake_ip"]
+    fake_ip = unquote(connection.query_params["fake_ip"])
 
     # 169 servers are behind SDR...
     if fake_ip.startswith("169"):
