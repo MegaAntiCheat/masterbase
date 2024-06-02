@@ -501,6 +501,8 @@ def list_demos_helper(engine: Engine, api_key: str, page_size: int, page_number:
         demo_sessions
     WHERE
         active = false
+    ORDER BY
+        start_time
     LIMIT :page_size OFFSET :offset
     ;
     """

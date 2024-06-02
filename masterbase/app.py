@@ -48,6 +48,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
+from masterbase.models import LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -101,7 +102,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
 
 @post("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
-def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str, bool]:
+def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
     """Add late bytes to a closed demo session..
 
     Returns:
@@ -109,9 +110,8 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     """
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
-    late_bytes = bytes.fromhex(data["late_bytes"])
     steam_id = steam_id_from_api_key(engine, api_key)
-    late_bytes_helper(engine, steam_id, late_bytes, current_time)
+    late_bytes_helper(engine, steam_id, data.converted_late_bytes, current_time)
 
     return {"late_bytes": True}
 
@@ -144,17 +144,15 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
 
 
 @post("/report", guards=[valid_key_guard])
-async def report_player(request: Request, api_key: str, data: dict[str, str]) -> dict[str, bool]:
+async def report_player(request: Request, api_key: str, data: ReportBody) -> dict[str, bool]:
     """Add a player report."""
     engine = request.app.state.engine
-    session_id = data["session_id"]
-    target_steam_id = data["target_steam_id"]
 
-    exists = account_exists(target_steam_id)
+    exists = account_exists(data.target_steam_id)
     if not exists:
         raise PermissionDeniedException(detail="Unknown target_steam_id!")
     try:
-        add_report(engine, session_id, target_steam_id)
+        add_report(engine, data.session_id, data.target_steam_id)
         return {"report_added": True}
     except IntegrityError:
         raise HTTPException(detail="Unknown `session_id`!", status_code=409)
