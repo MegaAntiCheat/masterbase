@@ -24,7 +24,8 @@ def upgrade() -> None:
         CREATE TABLE reports (
             session_id varchar REFERENCES demo_sessions,
             target_steam_id varchar,
-            created_at timestamptz
+            created_at timestamptz,
+            PRIMARY KEY (session_id, target_steam_id)
         );
         """
     )

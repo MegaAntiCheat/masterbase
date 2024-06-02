@@ -42,12 +42,14 @@ from masterbase.lib import (
     late_bytes_helper,
     list_demos_helper,
     provision_api_key,
+    resolve_hostname,
     set_open_false,
     set_open_true,
     start_session_helper,
     steam_id_from_api_key,
     update_api_key,
 )
+from masterbase.models import LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -79,6 +81,8 @@ def session_id(
     _session_id = generate_uuid4_int()
     engine = request.app.state.engine
     steam_id = steam_id_from_api_key(engine, api_key)
+    to_resolve, port = fake_ip.split(":")
+    fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
     start_session_helper(engine, steam_id, str(_session_id), demo_name, fake_ip, map)
 
     return {"session_id": _session_id}
@@ -101,7 +105,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
 
 @post("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
-def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str, bool]:
+def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
     """Add late bytes to a closed demo session..
 
     Returns:
@@ -109,24 +113,37 @@ def late_bytes(request: Request, api_key: str, data: dict[str, str]) -> dict[str
     """
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
-    late_bytes = bytes.fromhex(data["late_bytes"])
     steam_id = steam_id_from_api_key(engine, api_key)
-    late_bytes_helper(engine, steam_id, late_bytes, current_time)
+    late_bytes_helper(engine, steam_id, data.converted_late_bytes, current_time)
 
     return {"late_bytes": True}
 
 
-@get("/list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def list_demos(
+@get("/analyst_list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+def analyst_list_demos(
     request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
 ) -> list[dict[str, str]]:
-    """List demo data."""
+    """List all demo data."""
     if page_size is None or page_size >= 50 or page_size < 1:
         page_size = 50
     if page_number is None or page_number < 1:
         page_number = 1
     engine = request.app.state.engine
-    demos = list_demos_helper(engine, api_key, page_size, page_number)
+    demos = list_demos_helper(engine, api_key, page_size, page_number, analyst=True)
+    return demos
+
+
+@get("/list_demos", guards=[valid_key_guard], sync_to_thread=False)
+def list_demos(
+    request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
+) -> list[dict[str, str]]:
+    """List demo data for user with `api_key`."""
+    if page_size is None or page_size >= 50 or page_size < 1:
+        page_size = 50
+    if page_number is None or page_number < 1:
+        page_number = 1
+    engine = request.app.state.engine
+    demos = list_demos_helper(engine, api_key, page_size, page_number, analyst=False)
     return demos
 
 
@@ -144,20 +161,24 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
 
 
 @post("/report", guards=[valid_key_guard])
-async def report_player(request: Request, api_key: str, data: dict[str, str]) -> dict[str, bool]:
+async def report_player(request: Request, api_key: str, data: ReportBody) -> dict[str, bool]:
     """Add a player report."""
     engine = request.app.state.engine
-    session_id = data["session_id"]
-    target_steam_id = data["target_steam_id"]
 
-    exists = account_exists(target_steam_id)
+    exists = account_exists(str(data.target_steam_id))
     if not exists:
         raise PermissionDeniedException(detail="Unknown target_steam_id!")
     try:
-        add_report(engine, session_id, target_steam_id)
+        add_report(engine, data.session_id, str(data.target_steam_id))
         return {"report_added": True}
-    except IntegrityError:
-        raise HTTPException(detail="Unknown `session_id`!", status_code=409)
+    except IntegrityError as e:
+        # case target_steam_id is already reported in that session
+        traceback = str(e.orig.with_traceback(e.__traceback__))  # type: ignore
+        if "already exists" in traceback:
+            detail = f"Target ({data.target_steam_id}) is already reported in that session!"
+        else:
+            detail = f"Session ID ({data.session_id}) is unknown!"
+        raise HTTPException(detail=detail, status_code=409)
 
 
 class DemoHandler(WebsocketListener):
@@ -349,6 +370,7 @@ app = Litestar(
         late_bytes,
         demodata,
         list_demos,
+        analyst_list_demos,
         report_player,
     ],
     on_shutdown=shutdown_registers,
