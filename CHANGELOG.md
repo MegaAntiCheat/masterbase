@@ -7,12 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-
-## v1.0.1 - 2024-06-02
-
 ### Fixed
 
 - Bug with converting fake_ip correctly
+- LateBytesBody serialization bug
 
 
 ## v1.0.0 - 2024-06-02

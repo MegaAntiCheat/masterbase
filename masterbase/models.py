@@ -17,6 +17,3 @@ class LateBytesBody(BaseModel):
 
     late_bytes: str
 
-    def model_post_init(self, __context: Any) -> None:
-        """Convert late_bytes to bytes."""
-        self.converted_late_bytes = bytes.fromhex(self.late_bytes)
