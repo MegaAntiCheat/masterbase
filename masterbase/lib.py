@@ -600,7 +600,7 @@ def add_loser(engine: Engine, steam_id: str) -> None:
         conn.commit()
 
 
-def add_report(engine: Engine, target_steam_id: str, session_id: str | None) -> None:
+def add_report(engine: Engine, session_id: str, target_steam_id: str | None) -> None:
     """Submit a hackusation to the database."""
     # TODO: Eventually we need to enforce more rigorous checks
     with engine.connect() as conn:
