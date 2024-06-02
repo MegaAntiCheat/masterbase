@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 import secrets
+import socket
 from datetime import datetime, timezone
 from typing import IO, Any, AsyncGenerator
 from uuid import uuid4
@@ -22,6 +23,11 @@ os.makedirs(DEMOS_PATH, exist_ok=True)
 
 LATE_BYTES_START = 0x420
 LATE_BYTES_END = 0x430
+
+
+def resolve_hostname(hosthame: str) -> str:
+    """Resolve a hostname to an IP."""
+    return socket.gethostbyname(hosthame)
 
 
 def make_db_uri(is_async: bool = False) -> str:

@@ -42,6 +42,7 @@ from masterbase.lib import (
     late_bytes_helper,
     list_demos_helper,
     provision_api_key,
+    resolve_hostname,
     set_open_false,
     set_open_true,
     start_session_helper,
@@ -80,6 +81,8 @@ def session_id(
     _session_id = generate_uuid4_int()
     engine = request.app.state.engine
     steam_id = steam_id_from_api_key(engine, api_key)
+    to_resolve, port = fake_ip.split(":")
+    fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
     start_session_helper(engine, steam_id, str(_session_id), demo_name, fake_ip, map)
 
     return {"session_id": _session_id}

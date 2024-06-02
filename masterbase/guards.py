@@ -4,7 +4,14 @@ from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException, PermissionDeniedException
 from litestar.handlers.base import BaseRouteHandler
 
-from masterbase.lib import check_analyst, check_is_active, check_key_exists, session_closed, steam_id_from_api_key
+from masterbase.lib import (
+    check_analyst,
+    check_is_active,
+    check_key_exists,
+    resolve_hostname,
+    session_closed,
+    steam_id_from_api_key,
+)
 from masterbase.steam import Query, Server, get_ip_as_integer, get_steam_api_key
 
 
@@ -79,6 +86,9 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
 
     api_key = get_steam_api_key()
     fake_ip = connection.query_params["fake_ip"]
+
+    to_resolve, port = fake_ip.split(":")
+    fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
 
     # 169 servers are behind SDR...
     if fake_ip.startswith("169"):
