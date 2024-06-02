@@ -165,11 +165,11 @@ async def report_player(request: Request, api_key: str, data: ReportBody) -> dic
     """Add a player report."""
     engine = request.app.state.engine
 
-    exists = account_exists(data.target_steam_id)
+    exists = account_exists(str(data.target_steam_id))
     if not exists:
         raise PermissionDeniedException(detail="Unknown target_steam_id!")
     try:
-        add_report(engine, data.session_id, data.target_steam_id)
+        add_report(engine, data.session_id, str(data.target_steam_id))
         return {"report_added": True}
     except IntegrityError:
         raise HTTPException(detail="Unknown `session_id`!", status_code=409)
