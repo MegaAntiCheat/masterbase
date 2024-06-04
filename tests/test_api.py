@@ -1,6 +1,5 @@
 """Integration tests."""
 
-
 from typing import Iterator
 
 import pytest
@@ -37,8 +36,7 @@ def test_client(steam_id: str, api_key: str) -> Iterator[TestClient[Litestar]]:
         yield client
 
 
-
 def test_close_session_no_session(test_client: TestClient[Litestar], api_key: str) -> None:
     """Test closing a session yields a 403."""
-    response = test_client.get("/close_session", {"api-key": api_key})
+    response = test_client.get("/close_session", params={"api-key": api_key})
     assert response.status_code == HTTP_403_FORBIDDEN
