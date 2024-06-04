@@ -19,7 +19,7 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(scope="module")
 def steam_id() -> str:
     """Return steam ID fixture."""
-    return 76561111111111111
+    return '76561111111111111'
 
 
 @pytest.fixture(scope="module")
@@ -66,7 +66,7 @@ def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None
         "/session_id",
         params={"api_key": api_key, "fake_ip": "169.254.215.11%3A58480", "map": "asdf", "demo_name": "asdf"},
     )
-    session_id = response["session_id"]
+    session_id = response.json()["session_id"]
     asyncio.run(_send_demo_file(test_client, api_key, session_id))
 
     response = test_client.get("/close_session", params={"api_key": api_key})
