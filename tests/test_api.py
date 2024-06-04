@@ -45,7 +45,7 @@ def test_close_session_no_session(test_client: TestClient[Litestar], api_key: st
 
 
 async def _send_demo_file(test_client: TestClient[Litestar], session_id: str, api_key: str):
-    async with test_client.websocket_connect("/demos", params={"api_key": api_key, "session_id": session_id}) as socket:
+    with test_client.websocket_connect("/demos", params={"api_key": api_key, "session_id": session_id}) as socket:
         time.sleep(5)
         with open("tests/data/test_demo.dem", "rb") as f:
             while True:
