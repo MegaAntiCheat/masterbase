@@ -1,6 +1,5 @@
 """Module of pydantic models."""
 
-
 from pydantic import BaseModel
 
 
