@@ -363,12 +363,6 @@ def provision_handler(request: Request) -> str:
         """
 
 
-def plain_text_exception_handler(_: Request, exc: Exception) -> None:
-    """Handle exceptions subclassed from HTTPException."""
-    detail = getattr(exc, "detail", "")
-    logger.error(detail)
-
-
 app = Litestar(
     on_startup=startup_registers,
     route_handlers=[
@@ -383,7 +377,6 @@ app = Litestar(
         analyst_list_demos,
         report_player,
     ],
-    exception_handlers={HTTPException: plain_text_exception_handler},  # type: ignore
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
