@@ -29,6 +29,7 @@ dev = [
     "types-toml>=0.10.8.20240310",
     "types-requests>=2.31.0.20240406",
     "pgcli>=4.1.0",
+    "pytest-asyncio>=0.23.7",
 ]
 [build-system]
 requires = ["pdm-backend"]
@@ -42,6 +43,13 @@ includes = ["masterbase"]
 format.shell = "ruff format masterbase tests && ruff check masterbase tests --fix"
 lint.shell = "ruff check masterbase tests"
 app = "masterbase/app.py"
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "integration: run integration tests (deselect with '-m \"not integration\"')",
+]
 
 [tool.mypy]
 files = ["masterbase", "tests"]

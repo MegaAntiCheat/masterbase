@@ -6,7 +6,6 @@ from typing import Iterator
 
 import pytest
 import sqlalchemy as sa
-import websockets
 from litestar import Litestar
 from litestar.status_codes import HTTP_200_OK, HTTP_403_FORBIDDEN
 from litestar.testing import TestClient
@@ -19,7 +18,7 @@ pytestmark = pytest.mark.integration
 @pytest.fixture(scope="module")
 def steam_id() -> str:
     """Return steam ID fixture."""
-    return '76561111111111111'
+    return "76561111111111111"
 
 
 @pytest.fixture(scope="module")
@@ -46,11 +45,9 @@ def test_close_session_no_session(test_client: TestClient[Litestar], api_key: st
 
 
 async def _send_demo_file(test_client: TestClient[Litestar], session_id: str, api_key: str):
-    uri = f"ws://{test_client.base_url}/demos?api_key={api_key}&session_id={session_id}"
-    async with websockets.connect(uri) as socket:
+    async with test_client.websocket_connect("/demos", params={"api_key": api_key, "session_id": session_id}) as socket:
         time.sleep(5)
-        # with open("tests/data/test_demo.dem", "rb") as f:
-        with open("song.ogg", "rb") as f:
+        with open("tests/data/test_demo.dem", "rb") as f:
             while True:
                 chunk = f.read(720896)
                 time.sleep(0.2)
