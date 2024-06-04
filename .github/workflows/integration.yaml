@@ -21,6 +21,13 @@ jobs:
         ports:
           - 8050:5432
 
+    env:
+      FORCE_COLOR: 1
+      TERM: xterm-color
+      MYPY_FORCE_COLOR: 1
+      MYPY_FORCE_TERMINAL_WIDTH: 200
+      PYTEST_ADDOPTS: --color=yes
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
