@@ -4,6 +4,7 @@
 from typing import Iterator
 
 import pytest
+import sqlalchemy as sa
 from litestar import Litestar
 from litestar.status_codes import HTTP_403_FORBIDDEN
 from litestar.testing import TestClient
@@ -31,7 +32,7 @@ def test_client(steam_id: str, api_key: str) -> Iterator[TestClient[Litestar]]:
     with TestClient(app=app) as client:
         with app.state.engine.connect() as conn:
             sql = "INSERT INTO api_keys VALUES (:steam_id, :api_key, NOW(), NOW());"
-            conn.execute(sql, {"steam_id": steam_id, "api_key": api_key})
+            conn.execute(sa.text(sql), {"steam_id": steam_id, "api_key": api_key})
             conn.commit()
         yield client
 
