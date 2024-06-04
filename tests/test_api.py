@@ -37,6 +37,13 @@ def test_client(steam_id: str, api_key: str) -> Iterator[TestClient[Litestar]]:
             conn.commit()
         yield client
 
+        with app.state.engine.connect() as conn:
+            sql = "DELETE FROM demo_sessions;"
+            conn.execute(sa.text(sql))
+            sql = "DELETE FROM api_keys WHERE api_key = :api_key;"
+            conn.execute(sa.text(sql), {"api_key": api_key})
+            conn.commit()
+
 
 def test_close_session_no_session(test_client: TestClient[Litestar], api_key: str) -> None:
     """Test closing a session yields a 403."""
@@ -49,19 +56,18 @@ async def _send_demo_file(test_client: TestClient[Litestar], session_id: str, ap
         time.sleep(5)
         with open("tests/data/test_demo.dem", "rb") as f:
             while True:
-                chunk = f.read(720896)
-                time.sleep(0.2)
+                chunk = f.read(1024)
                 if not chunk:
                     break
-                await socket.send(chunk)
-            await socket.close()
+                socket.send_bytes(chunk)
+            socket.close()
 
 
 def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None:
     """Test streaming a demo to the DB."""
     response = test_client.get(
         "/session_id",
-        params={"api_key": api_key, "fake_ip": "169.254.215.11%3A58480", "map": "asdf", "demo_name": "asdf"},
+        params={"api_key": api_key, "fake_ip": "169.254.215.11%3A58480", "map": "some_map", "demo_name": "demo.dem"},
     )
     session_id = response.json()["session_id"]
     asyncio.run(_send_demo_file(test_client, api_key, session_id))
