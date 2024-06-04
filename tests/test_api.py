@@ -13,13 +13,13 @@ from masterbase.app import app
 pytestmark = pytest.mark.integration
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def steam_id() -> str:
     """Return steam ID fixture."""
     return 76561111111111111
 
 
-@pytest.fixture()
+@pytest.fixture(scope="module")
 def api_key() -> str:
     """Return API key ID fixture."""
     return "my-api-key"
