@@ -1,4 +1,4 @@
-name: Python Test
+name: Python Tests
 
 on:
   pull_request:
@@ -35,7 +35,7 @@ jobs:
         run: pdm sync -G:all
 
       - name: Run tests
-        run: pdm run pytest
+        run: pdm run pytest -m "not integration"
 
       - name: Run ruff
         run: pdm run ruff check masterbase --output-format=github
