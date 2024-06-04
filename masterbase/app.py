@@ -7,11 +7,10 @@ from urllib.parse import unquote, urlencode
 
 import requests
 import uvicorn
-from litestar import Litestar, MediaType, Request, Response, WebSocket, get, post
+from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Stream
-from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
@@ -364,17 +363,10 @@ def provision_handler(request: Request) -> str:
         """
 
 
-
-def plain_text_exception_handler(_: Request, exc: Exception) -> Response:
+def plain_text_exception_handler(_: Request, exc: Exception) -> None:
     """Handle exceptions subclassed from HTTPException."""
-    status_code = getattr(exc, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
     detail = getattr(exc, "detail", "")
-
-    return Response(
-        media_type=MediaType.TEXT,
-        content=detail,
-        status_code=status_code,
-    )
+    logger.error(detail)
 
 
 app = Litestar(
