@@ -1,6 +1,5 @@
 """Integration tests."""
 
-import asyncio
 import time
 from typing import Iterator
 
@@ -51,7 +50,7 @@ def test_close_session_no_session(test_client: TestClient[Litestar], api_key: st
     assert response.status_code == HTTP_403_FORBIDDEN
 
 
-async def _send_demo_file(test_client: TestClient[Litestar], session_id: str, api_key: str):
+def _send_demo_file(test_client: TestClient[Litestar], session_id: str, api_key: str):
     with test_client.websocket_connect("/demos", params={"api_key": api_key, "session_id": session_id}) as socket:
         time.sleep(5)
         with open("tests/data/test_demo.dem", "rb") as f:
@@ -70,7 +69,7 @@ def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None
         params={"api_key": api_key, "fake_ip": "169.254.215.11%3A58480", "map": "some_map", "demo_name": "demo.dem"},
     )
     session_id = response.json()["session_id"]
-    asyncio.run(_send_demo_file(test_client, api_key, session_id))
+    _send_demo_file(test_client, api_key, session_id)
 
     response = test_client.get("/close_session", params={"api_key": api_key})
     assert response.status_code == HTTP_200_OK
