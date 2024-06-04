@@ -1,6 +1,5 @@
 """Module of pydantic models."""
 
-from typing import Any
 
 from pydantic import BaseModel
 
@@ -16,4 +15,3 @@ class LateBytesBody(BaseModel):
     """Report model for late_bytes post request body."""
 
     late_bytes: str
-

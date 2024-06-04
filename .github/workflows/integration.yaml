@@ -1,0 +1,45 @@
+name: Running Tests
+
+on:
+  workflow_dispatch:
+
+jobs:
+  Test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16.1-bullseye
+
+        env:
+          POSTGRES_PASSWORD: masterbase
+          POSTGRES_USER: MEGASCATTERBOMB
+          POSTGRES_DB: demos
+
+        ports:
+          - 8050:5432
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PDM
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pdm
+
+      - name: Install dependencies
+        run: pdm sync -G:all
+
+      - name: Run tests
+        run: |
+          pdm run alembic upgrade head
+          pdm run pytest -m integration
+        env:
+          POSTGRES_PASSWORD: masterbase
+          POSTGRES_USER: MEGASCATTERBOMB
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: 8050
+          DEVELOPMENT: true
