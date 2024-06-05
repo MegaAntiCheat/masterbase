@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  db:
+    build:
+      context: .
+      dockerfile: Dockerfile.db
+    container_name: db
+    environment:
+      POSTGRES_USER: MEGASCATTERBOMB
+      POSTGRES_PASSWORD: masterbase
+      POSTGRES_DB: demos
+    networks:
+      masterbase-network-dev:
+        ipv4_address: 172.20.1.10
+    ports:
+      - "8050:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+      args:
+        DEVELOPMENT: ${DEVELOPMENT}
+    container_name: api
+    environment:
+      STEAM_API_KEY: ${STEAM_API_KEY}
+      POSTGRES_USER: MEGASCATTERBOMB
+      POSTGRES_PASSWORD: masterbase
+      POSTGRES_HOST: 172.20.1.10
+      POSTGRES_PORT: 5432
+    networks:
+      masterbase-network-dev:
+        ipv4_address: 172.20.1.20
+    ports:
+      - "8000:8000"
+
+networks:
+  masterbase-network-dev:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
