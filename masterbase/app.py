@@ -8,6 +8,7 @@ from urllib.parse import unquote, urlencode
 import requests
 import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
+from litestar.contrib.prometheus import PrometheusConfig, PrometheusController
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Stream
@@ -362,10 +363,12 @@ def provision_handler(request: Request) -> str:
         </html>
         """
 
+prometheus_config = PrometheusConfig()
 
 app = Litestar(
     on_startup=startup_registers,
     route_handlers=[
+        PrometheusController,
         session_id,
         close_session,
         DemoHandler,
@@ -377,6 +380,7 @@ app = Litestar(
         analyst_list_demos,
         report_player,
     ],
+    middleware=[prometheus_config.middleware],
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
