@@ -1,13 +1,16 @@
 """Module of pydantic models."""
 
-from pydantic import BaseModel
 from enum import Enum
+
+from pydantic import BaseModel
 
 
 class ReportReason(str, Enum):
     """Valid reasons for reports."""
+
     bot = "bot"
     cheater = "cheater"
+
 
 class ReportBody(BaseModel):
     """Report model for report post request body."""
