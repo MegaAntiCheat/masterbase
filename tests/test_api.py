@@ -11,7 +11,7 @@ from litestar.testing import TestClient
 
 from masterbase.app import app
 from masterbase.lib import LATE_BYTES_END, LATE_BYTES_START
-from masterbase.models import ReportBody
+from masterbase.models import ReportReason
 
 pytestmark = pytest.mark.integration
 
@@ -64,7 +64,7 @@ def test_report_reasons_match(test_client: TestClient[Litestar]) -> None:
             )
         )
     db_reasons = next(zip(*cursor))
-    pd_reasons = tuple(variant.value for variant in ReportBody)
+    pd_reasons = tuple(variant.value for variant in ReportReason)
     assert db_reasons == pd_reasons, (
         "Database and Pydantic: ORM mismatch!"
         + f"\n\tDatabase accepts {db_reasons}."
