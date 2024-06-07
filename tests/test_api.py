@@ -56,7 +56,7 @@ def test_report_reasons_match() -> None:
             SELECT enumlabel
             FROM pg_enum
             JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
-            WHERE pg_type.typname = "report_reason";
+            WHERE pg_type.typname = 'report_reason';
             """
         ))
         db_reasons = tuple(row["enumlabel"] for row in cursor)

@@ -21,7 +21,7 @@ depends_on: Union[str, Sequence[str], None] = None
 def upgrade() -> None:
     op.execute(
         """
-        CREATE TYPE report_reason AS ENUM ("bot", "cheater");
+        CREATE TYPE report_reason AS ENUM ('bot', 'cheater');
 
         ALTER TABLE reports
         ADD COLUMN report report_reason;
