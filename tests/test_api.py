@@ -50,9 +50,9 @@ def test_client(steam_id: str, api_key: str) -> Iterator[TestClient[Litestar]]:
             conn.commit()
 
 
-def test_report_reasons_match() -> None:
+def test_report_reasons_match(test_client: TestClient[Litestar]) -> None:
     """Ensure that Pydantic report reasons match the postgres type registry."""
-    with app.state.engine.connect() as conn:
+    with test_client.app.state.engine.connect() as conn:
         cursor = conn.execute(
             sa.text(
                 """
@@ -63,13 +63,13 @@ def test_report_reasons_match() -> None:
             """
             )
         )
-        db_reasons = tuple(row["enumlabel"] for row in cursor)
-        pd_reasons = tuple(variant.value for variant in ReportBody)
-        assert db_reasons == pd_reasons, (
-            "Database and Pydantic: ORM mismatch!"
-            + f"\n\tDatabase accepts {db_reasons}."
-            + f"\n\tPydantic accepts {pd_reasons}."
-        )
+    db_reasons = tuple(row["enumlabel"] for row in cursor)
+    pd_reasons = tuple(variant.value for variant in ReportBody)
+    assert db_reasons == pd_reasons, (
+        "Database and Pydantic: ORM mismatch!"
+        + f"\n\tDatabase accepts {db_reasons}."
+        + f"\n\tPydantic accepts {pd_reasons}."
+    )
 
 
 def test_close_session_no_session(test_client: TestClient[Litestar], api_key: str) -> None:
