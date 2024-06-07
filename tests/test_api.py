@@ -64,7 +64,7 @@ def test_report_reasons_match() -> None:
         assert db_reasons == pd_reasons, (
             "Database and Pydantic: ORM mismatch!" +
             f"\n\tDatabase accepts {db_reasons}." +
-            f"\n\tPydaantic accepts {pd_reasons}."
+            f"\n\tPydantic accepts {pd_reasons}."
         )
     
 
