@@ -3,6 +3,7 @@
 import time
 from typing import Iterator
 
+from masterbase.models import ReportBody
 import pytest
 import sqlalchemy as sa
 from litestar import Litestar
@@ -48,6 +49,24 @@ def test_client(steam_id: str, api_key: str) -> Iterator[TestClient[Litestar]]:
             conn.execute(sa.text(sql), {"steam_id": steam_id})
             conn.commit()
 
+def test_report_reasons_match() -> None:
+    with app.state.engine.connect() as conn:
+        cursor = conn.execute(sa.text(
+            """
+            SELECT enumlabel
+            FROM pg_enum
+            JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
+            WHERE pg_type.typname = "report_reason";
+            """
+        ))
+        db_reasons = tuple(row["enumlabel"] for row in cursor)
+        pd_reasons = tuple(variant.value for variant in ReportBody)
+        assert db_reasons == pd_reasons, (
+            "Database and Pydantic: ORM mismatch!" +
+            f"\n\tDatabase accepts {db_reasons}." +
+            f"\n\tPydaantic accepts {pd_reasons}."
+        )
+    
 
 def test_close_session_no_session(test_client: TestClient[Litestar], api_key: str) -> None:
     """Test closing a session yields a 403."""
