@@ -63,7 +63,7 @@ def test_report_reasons_match(test_client: TestClient[Litestar]) -> None:
             """
             )
         )
-    db_reasons = tuple(row["enumlabel"] for row in cursor)
+    db_reasons = next(zip(*cursor))
     pd_reasons = tuple(variant.value for variant in ReportBody)
     assert db_reasons == pd_reasons, (
         "Database and Pydantic: ORM mismatch!"
