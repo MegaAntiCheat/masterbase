@@ -36,7 +36,6 @@ from masterbase.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     close_session_helper,
-    demo_sink_path,
     demodata_helper,
     generate_api_key,
     generate_uuid4_int,
@@ -48,7 +47,6 @@ from masterbase.lib import (
     set_open_false,
     set_open_true,
     start_session_helper,
-    stat_demo_blob,
     steam_id_from_api_key,
     update_api_key,
 )
@@ -217,7 +215,7 @@ class DemoHandler(WebsocketListener):
 
         await set_open_true(engine, steam_id, session_id)
 
-        session_manager = DemoSessionManager(handle=s3, session_id=session_id, detection_state=DetectionState())
+        session_manager = DemoSessionManager(session_id=session_id, detection_state=DetectionState())
 
         if os.path.exists(session_manager.demo_path):
             mode = "ab"
