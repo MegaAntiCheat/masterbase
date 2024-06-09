@@ -362,7 +362,7 @@ def _close_session_with_demo(
                 end_time = :end_time,
                 demo_size = :demo_size,
                 markov_score = :markov_score,
-                updated_at = :updated_at
+                updated_at = :updated_at,
                 blob_name = :blob_name
                 WHERE
                 steam_id = :steam_id AND
