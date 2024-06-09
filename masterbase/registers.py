@@ -3,10 +3,22 @@
 from typing import cast
 
 from litestar import Litestar
+from minio import Minio
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from masterbase.lib import make_db_uri
+from masterbase.lib import make_db_uri, make_s3_svc
+
+
+def get_s3_connection(app: Litestar) -> Minio:
+    """Initialize and mount S3-compatible client, if not already attached."""
+    if not getattr(app.state, "s3", None):
+        s3 = make_s3_svc()
+        if not s3.bucket_exists("demos"):
+            s3.make_bucket("demos", "us-east-1")
+        app.state.s3 = s3
+
+    return cast("Minio", app.state.s3)
 
 
 def get_db_connection(app: Litestar) -> Engine:
@@ -41,5 +53,5 @@ async def close_async_db_connection(app: Litestar) -> None:
         await cast("AsyncEngine", app.state.async_engine).dispose()
 
 
-startup_registers = (get_db_connection, get_async_db_connection)
+startup_registers = (get_db_connection, get_async_db_connection, get_s3_connection)
 shutdown_registers = (close_db_connection, close_async_db_connection)

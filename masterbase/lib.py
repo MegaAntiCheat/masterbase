@@ -1,16 +1,20 @@
 """Library code for application."""
 
 import hashlib
+import io
 import logging
 import os
 import secrets
 import socket
 from datetime import datetime, timezone
-from typing import IO, Any, AsyncGenerator
+from typing import IO, Any, Generator
 from uuid import uuid4
 
 import sqlalchemy as sa
 from litestar import WebSocket
+from minio import Minio, S3Error
+from minio.commonconfig import ComposeSource
+from minio.datatypes import Object as BlobStat
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -31,7 +35,7 @@ def resolve_hostname(hosthame: str) -> str:
 
 
 def make_db_uri(is_async: bool = False) -> str:
-    """Correctly make the database URi."""
+    """Correctly make the database URI."""
     user = os.environ["POSTGRES_USER"]
     password = os.environ["POSTGRES_PASSWORD"]
     host = os.environ.get("POSTGRES_HOST", "localhost")
@@ -43,10 +47,16 @@ def make_db_uri(is_async: bool = False) -> str:
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
 
 
+def make_s3_svc(is_secure: bool = False) -> Minio:
+    """Create and return an S3-compatible client handle."""
+    host, port, access_key, secret_key = map(os.getenv, ("S3_HOST", "S3_PORT", "S3_ACCESS_KEY", "S3_SECRET_KEY"))
+    return Minio(f"{host}:{port}", access_key=access_key, secret_key=secret_key, secure=is_secure)
+
+
 class DemoSessionManager:
     """Helper class to facilitate access."""
 
-    def __init__(self, session_id: str, detection_state: DetectionState) -> None:
+    def __init__(self, client: Minio, session_id: str, detection_state: DetectionState) -> None:
         """Create a demo session manager.
 
         Args:
@@ -55,23 +65,25 @@ class DemoSessionManager:
         """
         self.session_id = session_id
         self.detection_state = detection_state
+        self.chunk_count = 0
+        self.client = client
 
     @property
     def demo_path(self) -> str:
         """Path of the demo for this session."""
-        return os.path.join(DEMOS_PATH, f"{self.session_id}.dem")
+        return demo_sink_path(self.session_id)
 
     def set_demo_handle(self, mode: str) -> None:
         """Open a handle with the mode at `self.demo_path`."""
         self.handle = open(self.demo_path, mode)
 
     def update(self, data: bytes) -> None:
-        """Write data to both handle and state objects."""
+        """Write data to both blob storage and state objects."""
         self.handle.write(data)
         self.detection_state.update(data)
 
     def disconnect(self) -> None:
-        """Close objects."""
+        """Close objects and consolidate data."""
         self.handle.close()
 
 
@@ -327,12 +339,20 @@ def _close_session_without_demo(engine: Engine, steam_id: str, current_time: dat
 
 
 def _close_session_with_demo(
-    engine: Engine, steam_id: str, session_id: str, current_time: datetime, demo_path: str, markov_score: float
+    s3: Minio,
+    engine: Engine,
+    steam_id: str,
+    session_id: str,
+    current_time: datetime,
+    markov_score: float,
 ) -> None:
     """Close out a session in the DB."""
+    blob_stat = stat_demo_blob(s3, session_id)
+    sink_path = demo_sink_path(session_id)
+    size = os.stat(demo_sink_path(session_id)).st_size
+    if blob_stat is None:
+        s3.fput_object("demos", demo_blob_name(session_id), sink_path)
     with engine.connect() as conn:
-        size = os.stat(demo_path).st_size
-        oid = conn.connection.lobject(mode="w", new_file=demo_path).oid  # type: ignore
         conn.execute(
             sa.text(
                 """UPDATE demo_sessions
@@ -340,13 +360,13 @@ def _close_session_with_demo(
                 active = False,
                 open = False,
                 end_time = :end_time,
-                demo_oid = :demo_oid,
                 demo_size = :demo_size,
                 markov_score = :markov_score,
                 updated_at = :updated_at
                 WHERE
                 steam_id = :steam_id AND
-                session_id = :session_id;"""
+                session_id = :session_id
+                blob_name = :blob_name;"""
             ),
             {
                 "steam_id": steam_id,
@@ -355,13 +375,13 @@ def _close_session_with_demo(
                 "updated_at": current_time.isoformat(),
                 "demo_size": size,
                 "markov_score": markov_score,
-                "demo_oid": oid,
+                "blob_name": demo_blob_name(session_id),
             },
         )
         conn.commit()
 
 
-def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType) -> str:
+def close_session_helper(s3: Minio, engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType) -> str:
     """Properly close a session and return a summary message.
 
     Args:
@@ -392,6 +412,7 @@ def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: Sock
     else:
         if os.path.exists(session_manager.demo_path):
             _close_session_with_demo(
+                s3,
                 engine,
                 steam_id,
                 latest_session_id,
@@ -414,28 +435,85 @@ def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: Sock
     return msg
 
 
-def late_bytes_helper(engine: Engine, steam_id: str, late_bytes: bytes, current_time: datetime) -> None:
-    """Add late bytes to the DB."""
+def demo_blob_name(session_id: str) -> str:
+    """Format the object name for a demo blob."""
+    return f"{session_id}.dem"
+
+
+def demo_sink_path(session_id: str) -> str:
+    """Format the media path for a demo blob."""
+    return os.path.join(DEMOS_PATH, demo_blob_name(session_id))
+
+
+def stat_demo_blob(s3: Minio, session_id: str) -> BlobStat:
+    """Return information on the status of a given blob if it exists, else None."""
+    try:
+        return s3.stat_object("demos", demo_blob_name(session_id))
+    except S3Error as err:
+        if err.code == "NoSuchKey":
+            return None
+        else:
+            raise
+
+
+def late_bytes_helper(
+    s3: Minio,
+    engine: Engine,
+    steam_id: str,
+    late_bytes: bytes,
+    current_time: datetime,
+) -> bool:
+    """Add late bytes to the database and blob storage.
+
+    No-ops and returns False if late bytes were found previously, True if they were absent.
+    """
     with engine.connect() as conn:
-        conn.execute(
+        session_id, old_late_bytes = conn.execute(
             sa.text(
-                """UPDATE demo_sessions
-                SET
-                late_bytes = :late_bytes,
-                updated_at = :updated_at
-                WHERE
-                steam_id = :steam_id
+                """SELECT session_id, late_bytes FROM demo_sessions
+                WHERE steam_id = :steam_id
                 AND updated_at = (
                     SELECT MAX(updated_at) FROM demo_sessions WHERE steam_id = :steam_id
-                );"""
+                );
+                """,
             ),
-            {
-                "steam_id": steam_id,
-                "late_bytes": late_bytes,
-                "updated_at": current_time.isoformat(),
-            },
-        )
-        conn.commit()
+            {"steam_id": steam_id},
+        ).one()
+        sink_path = None
+
+        if session_id and old_late_bytes:
+            return False
+        else:
+            conn.execute(
+                sa.text(
+                    """UPDATE demo_sessions
+                        SET
+                        late_bytes = :late_bytes,
+                        updated_at = :updated_at
+                        WHERE session_id = session_id;"""
+                ),
+                {
+                    "session_id": session_id,
+                    "late_bytes": late_bytes,
+                    "updated_at": current_time.isoformat(),
+                },
+            )
+            conn.commit()
+            blob_name = demo_blob_name(session_id)
+            comp_name = f"{blob_name}.comp"
+            late_name = f"{blob_name}.late"
+            if stat_demo_blob(s3, session_id) is not None:
+                s3.fput_object("demos", blob_name, sink_path)
+                s3.put_object("demos", late_name, io.BytesIO(late_bytes), len(late_bytes))
+                composite_sources = [
+                    ComposeSource("demos", blob_name, length=LATE_BYTES_START - 1),
+                    ComposeSource("demos", late_name),
+                    ComposeSource("demos", blob_name, offset=LATE_BYTES_END),
+                ]
+                s3.compose_object("demos", comp_name, composite_sources)
+                s3.copy_object("demos", blob_name, comp_name)
+                s3.remove_object("demos", comp_name)
+                return True
 
 
 async def get_demo_size(engine: AsyncEngine, session_id: str) -> str:
@@ -460,40 +538,16 @@ async def get_demo_oid(engine: AsyncEngine, session_id: str) -> int:
         return int(demo_oid)
 
 
-async def demodata_helper(engine: AsyncEngine, session_id: str) -> AsyncGenerator[bytes, None]:
-    """Yield demo data page by page."""
-    demo_oid = await get_demo_oid(engine, session_id)
-    sql = """
-        SELECT pageno, data
-        FROM pg_largeobject
-        WHERE loid = :demo_oid
-        ORDER BY pageno;
+def demodata_helper(s3: Minio, session_id: str, chunk_size=5 << 20) -> Generator[bytes, None, None]:
+    """Yield demo data in pages.
+
+    Chunks are 5MiB to keep peak mem constant on a per-session basis.
     """
-    async with engine.connect() as conn:
-        result = await conn.stream(sa.text(sql), dict(demo_oid=demo_oid))
-
-        first = True
-        while True:
-            row = await result.fetchone()
-            if row is None:
-                break
-
-            bytestream = row[1]
-
-            if first:
-                sql = "SELECT late_bytes from demo_sessions where session_id = :session_id;"
-                _late_bytes = await conn.execute(sa.text(sql), dict(session_id=session_id))
-                late_bytes = _late_bytes.scalar_one_or_none()
-                if late_bytes is None:
-                    logger.info(f"Session {session_id} has no late_bytes!")
-                    yield bytestream
-                else:
-                    # bytesurgeon >:D
-                    bytestream = bytestream[:LATE_BYTES_START] + late_bytes + bytestream[LATE_BYTES_END:]
-                    yield bytestream
-                first = False
-            else:
-                yield bytestream
+    try:
+        response = s3.get_object("demos", demo_blob_name(session_id))
+        yield from response.read_chunked(chunk_size)
+    finally:
+        response.release_conn()
 
 
 def list_demos_helper(

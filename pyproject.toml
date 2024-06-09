@@ -16,6 +16,7 @@ dependencies = [
     "greenlet>=3.0.3",
     "uvicorn>=0.27.1",
     "numpy>=1.26.4",
+    "minio>=7.2.7",
 ]
 requires-python = ">=3.11,<3.13"
 readme = "README.md"
@@ -30,6 +31,7 @@ dev = [
     "types-requests>=2.31.0.20240406",
     "pgcli>=4.1.0",
     "pytest-asyncio>=0.23.7",
+    "debugpy>=1.8.1",
 ]
 [build-system]
 requires = ["pdm-backend"]

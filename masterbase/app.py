@@ -11,6 +11,7 @@ from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Stream
+from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
@@ -35,6 +36,7 @@ from masterbase.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     close_session_helper,
+    demo_sink_path,
     demodata_helper,
     generate_api_key,
     generate_uuid4_int,
@@ -46,6 +48,7 @@ from masterbase.lib import (
     set_open_false,
     set_open_true,
     start_session_helper,
+    stat_demo_blob,
     steam_id_from_api_key,
     update_api_key,
 )
@@ -98,10 +101,11 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     Returns:
         {"closed_successfully": True}
     """
+    s3 = request.app.state.s3
     engine = request.app.state.engine
 
     steam_id = steam_id_from_api_key(engine, api_key)
-    msg = close_session_helper(engine, steam_id, streaming_sessions)
+    msg = close_session_helper(s3, engine, steam_id, streaming_sessions)
     logger.info(msg)
 
     return {"closed_successfully": True}
@@ -109,18 +113,18 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
 @post("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
 def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
-    """Add late bytes to a closed demo session..
+    """Add late bytes to a closed demo session.
 
     Returns:
         {"late_bytes": True}
     """
+    s3 = request.app.state.s3
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
     steam_id = steam_id_from_api_key(engine, api_key)
     converted_late_bytes = bytes.fromhex(data.late_bytes)
-    late_bytes_helper(engine, steam_id, converted_late_bytes, current_time)
-
-    return {"late_bytes": True}
+    added = late_bytes_helper(s3, engine, steam_id, converted_late_bytes, current_time, streaming_sessions)
+    return {"late_bytes": added}
 
 
 @get("/analyst_list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
@@ -194,6 +198,7 @@ class DemoHandler(WebsocketListener):
     async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:  # type: ignore
         """Accept a user and create handle."""
         engine = socket.app.state.async_engine
+        s3 = socket.app.state.s3
         exists = await check_key_exists(engine, api_key)
         if not exists:
             logger.info("Invalid API key, closing!")
@@ -212,7 +217,7 @@ class DemoHandler(WebsocketListener):
 
         await set_open_true(engine, steam_id, session_id)
 
-        session_manager = DemoSessionManager(session_id=session_id, detection_state=DetectionState())
+        session_manager = DemoSessionManager(handle=s3, session_id=session_id, detection_state=DetectionState())
 
         if os.path.exists(session_manager.demo_path):
             mode = "ab"
@@ -363,6 +368,15 @@ def provision_handler(request: Request) -> str:
         """
 
 
+if os.getenv("DEVELOPMENT"):
+
+    def _reraise(req, err):
+        raise ValueError(req) from err
+
+    exception_handlers = {HTTP_500_INTERNAL_SERVER_ERROR: _reraise}
+else:
+    exception_handlers = {}
+
 app = Litestar(
     on_startup=startup_registers,
     route_handlers=[
@@ -377,6 +391,7 @@ app = Litestar(
         analyst_list_demos,
         report_player,
     ],
+    exception_handlers=exception_handlers,
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )

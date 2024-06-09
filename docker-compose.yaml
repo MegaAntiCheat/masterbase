@@ -1,43 +1,75 @@
 version: '3.8'
 
 services:
+  s3:
+    # networks:
+    #   masterbase-network-dev:
+    #     ipv4_address: 172.20.1.10
+    build:
+      context: .
+      dockerfile: ./services/s3/Dockerfile
+    container_name: s3
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: MEGASCATTERBOMB
+      MINIO_ROOT_PASSWORD: masterbase
+    volumes:
+      - s3_data:/blobs/
+
   db:
     build:
       context: .
-      dockerfile: Dockerfile.db
+      dockerfile: ./services/db/Dockerfile
     container_name: db
     environment:
       POSTGRES_USER: MEGASCATTERBOMB
       POSTGRES_PASSWORD: masterbase
       POSTGRES_DB: demos
-    networks:
-      masterbase-network-dev:
-        ipv4_address: 172.20.1.10
     ports:
       - "8050:5432"
-
+    # networks:
+    #   masterbase-network-dev:
+    #     ipv4_address: 172.20.1.20
+    volumes:
+      - db_data:/var/lib/postgresql/data/
+    
   api:
     build:
       context: .
-      dockerfile: Dockerfile.api
+      dockerfile: ./services/api/Dockerfile
       args:
         DEVELOPMENT: ${DEVELOPMENT}
     container_name: api
     environment:
+      DEVELOPMENT: ${DEVELOPMENT}
+      DEBUG_WAIT_FOR_ATTACH: ${DEBUG_WAIT_FOR_ATTACH}
       STEAM_API_KEY: ${STEAM_API_KEY}
       POSTGRES_USER: MEGASCATTERBOMB
       POSTGRES_PASSWORD: masterbase
-      POSTGRES_HOST: 172.20.1.10
+      POSTGRES_HOST: db
       POSTGRES_PORT: 5432
-    networks:
-      masterbase-network-dev:
-        ipv4_address: 172.20.1.20
+      S3_HOST: s3
+      S3_PORT: 9000
+      S3_ACCESS_KEY: MEGASCATTERBOMB
+      S3_SECRET_KEY: masterbase
     ports:
       - "8000:8000"
+    # networks:
+    #   masterbase-network-dev:
+    #     ipv4_address: 172.20.1.30
+
 
 networks:
-  masterbase-network-dev:
+  masterbase_default:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
+ # networks:
+ #   masterbase-network-dev:
+ #     driver: bridge
+ #     ipam:
+ #       config:
+ #         - subnet: 172.20.0.0/16
+volumes:
+  s3_data:
+  db_data:

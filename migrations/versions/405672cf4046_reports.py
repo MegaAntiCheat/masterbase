@@ -19,6 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
+    """Add the reports table."""
     op.execute(
         """
         CREATE TABLE reports (
@@ -32,6 +33,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    """Remove the reports table."""
     op.execute(
         """
         DROP TABLE reports;
