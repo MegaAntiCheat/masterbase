@@ -121,7 +121,7 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
     current_time = datetime.now().astimezone(timezone.utc)
     steam_id = steam_id_from_api_key(engine, api_key)
     converted_late_bytes = bytes.fromhex(data.late_bytes)
-    added = late_bytes_helper(s3, engine, steam_id, converted_late_bytes, current_time, streaming_sessions)
+    added = late_bytes_helper(s3, engine, steam_id, converted_late_bytes, current_time)
     return {"late_bytes": added}
 
 
