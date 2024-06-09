@@ -19,11 +19,11 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add the blob_name column to the reports table."""
+    """Add the blob_name column to the demo_sessions table."""
     op.execute(
         sa.text(
             """
-        ALTER TABLE reports
+        ALTER TABLE demo_sessions
         ADD COLUMN blob_name TEXT;
         """
         )
@@ -31,12 +31,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Drop the blob_name column from the reports table."""
+    """Drop the blob_name column from the demo_sessions table."""
     op.execute(
         sa.text(
             """
-        ALTER TABLE reports
-        DROP COLUMN blob_name TEXT;
+        ALTER TABLE demo_sessions
+        DROP COLUMN blob_name;
         """
         )
     )

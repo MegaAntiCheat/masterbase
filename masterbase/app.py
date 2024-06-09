@@ -99,11 +99,11 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     Returns:
         {"closed_successfully": True}
     """
-    s3 = request.app.state.s3
+    minio_client = request.app.state.minio_client
     engine = request.app.state.engine
 
     steam_id = steam_id_from_api_key(engine, api_key)
-    msg = close_session_helper(s3, engine, steam_id, streaming_sessions)
+    msg = close_session_helper(minio_client, engine, steam_id, streaming_sessions)
     logger.info(msg)
 
     return {"closed_successfully": True}
@@ -116,12 +116,12 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
     Returns:
         {"late_bytes": True}
     """
-    s3 = request.app.state.s3
+    minio_client = request.app.state.minio_client
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
     steam_id = steam_id_from_api_key(engine, api_key)
     converted_late_bytes = bytes.fromhex(data.late_bytes)
-    added = late_bytes_helper(s3, engine, steam_id, converted_late_bytes, current_time)
+    added = late_bytes_helper(minio_client, engine, steam_id, converted_late_bytes, current_time)
     return {"late_bytes": added}
 
 
@@ -196,7 +196,7 @@ class DemoHandler(WebsocketListener):
     async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:  # type: ignore
         """Accept a user and create handle."""
         engine = socket.app.state.async_engine
-        s3 = socket.app.state.s3
+        minio_client = socket.app.state.minio_client
         exists = await check_key_exists(engine, api_key)
         if not exists:
             logger.info("Invalid API key, closing!")
@@ -215,7 +215,9 @@ class DemoHandler(WebsocketListener):
 
         await set_open_true(engine, steam_id, session_id)
 
-        session_manager = DemoSessionManager(session_id=session_id, detection_state=DetectionState())
+        session_manager = DemoSessionManager(
+            minio_client=minio_client, session_id=session_id, detection_state=DetectionState()
+        )
 
         if os.path.exists(session_manager.demo_path):
             mode = "ab"

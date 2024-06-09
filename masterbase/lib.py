@@ -47,16 +47,18 @@ def make_db_uri(is_async: bool = False) -> str:
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
 
 
-def make_s3_svc(is_secure: bool = False) -> Minio:
+def make_minio_client(is_secure: bool = False) -> Minio:
     """Create and return an S3-compatible client handle."""
-    host, port, access_key, secret_key = map(os.getenv, ("S3_HOST", "S3_PORT", "S3_ACCESS_KEY", "S3_SECRET_KEY"))
+    host, port, access_key, secret_key = map(
+        os.getenv, ("MINIO_HOST", "MINIO_PORT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY")
+    )
     return Minio(f"{host}:{port}", access_key=access_key, secret_key=secret_key, secure=is_secure)
 
 
 class DemoSessionManager:
     """Helper class to facilitate access."""
 
-    def __init__(self, client: Minio, session_id: str, detection_state: DetectionState) -> None:
+    def __init__(self, minio_client: Minio, session_id: str, detection_state: DetectionState) -> None:
         """Create a demo session manager.
 
         Args:
@@ -66,7 +68,7 @@ class DemoSessionManager:
         self.session_id = session_id
         self.detection_state = detection_state
         self.chunk_count = 0
-        self.client = client
+        self.minio_client = minio_client
 
     @property
     def demo_path(self) -> str:
@@ -339,19 +341,18 @@ def _close_session_without_demo(engine: Engine, steam_id: str, current_time: dat
 
 
 def _close_session_with_demo(
-    s3: Minio,
+    minio_client: Minio,
     engine: Engine,
     steam_id: str,
     session_id: str,
     current_time: datetime,
     markov_score: float,
 ) -> None:
-    """Close out a session in the DB."""
-    blob_stat = stat_demo_blob(s3, session_id)
+    """Close out a session in the DB, sink to MinIO."""
     sink_path = demo_sink_path(session_id)
-    size = os.stat(demo_sink_path(session_id)).st_size
-    if blob_stat is None:
-        s3.fput_object("demos", demo_blob_name(session_id), sink_path)
+    size = os.stat(sink_path).st_size
+    minio_client.put_object
+    minio_client.fput_object("demos", demo_blob_name(session_id), sink_path)
     with engine.connect() as conn:
         conn.execute(
             sa.text(
@@ -382,7 +383,9 @@ def _close_session_with_demo(
         conn.commit()
 
 
-def close_session_helper(s3: Minio, engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType) -> str:
+def close_session_helper(
+    minio_client: Minio, engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType
+) -> str:
     """Properly close a session and return a summary message.
 
     Args:
@@ -413,12 +416,11 @@ def close_session_helper(s3: Minio, engine: Engine, steam_id: str, streaming_ses
     else:
         if os.path.exists(session_manager.demo_path):
             _close_session_with_demo(
-                s3,
+                minio_client,
                 engine,
                 steam_id,
                 latest_session_id,
                 current_time,
-                session_manager.demo_path,
                 session_manager.detection_state.likelihood,
             )
             os.remove(session_manager.demo_path)
@@ -446,10 +448,10 @@ def demo_sink_path(session_id: str) -> str:
     return os.path.join(DEMOS_PATH, demo_blob_name(session_id))
 
 
-def stat_demo_blob(s3: Minio, session_id: str) -> BlobStat:
+def stat_demo_blob(minio_client: Minio, session_id: str) -> BlobStat:
     """Return information on the status of a given blob if it exists, else None."""
     try:
-        return s3.stat_object("demos", demo_blob_name(session_id))
+        return minio_client.stat_object("demos", demo_blob_name(session_id))
     except S3Error as err:
         if err.code == "NoSuchKey":
             return None
@@ -458,7 +460,7 @@ def stat_demo_blob(s3: Minio, session_id: str) -> BlobStat:
 
 
 def late_bytes_helper(
-    s3: Minio,
+    minio_client: Minio,
     engine: Engine,
     steam_id: str,
     late_bytes: bytes,
@@ -503,17 +505,17 @@ def late_bytes_helper(
             blob_name = demo_blob_name(session_id)
             comp_name = f"{blob_name}.comp"
             late_name = f"{blob_name}.late"
-            if stat_demo_blob(s3, session_id) is not None:
-                s3.fput_object("demos", blob_name, sink_path)
-                s3.put_object("demos", late_name, io.BytesIO(late_bytes), len(late_bytes))
+            if stat_demo_blob(minio_client, session_id) is not None:
+                minio_client.fput_object("demos", blob_name, sink_path)
+                minio_client.put_object("demos", late_name, io.BytesIO(late_bytes), len(late_bytes))
                 composite_sources = [
                     ComposeSource("demos", blob_name, length=LATE_BYTES_START - 1),
                     ComposeSource("demos", late_name),
                     ComposeSource("demos", blob_name, offset=LATE_BYTES_END),
                 ]
-                s3.compose_object("demos", comp_name, composite_sources)
-                s3.copy_object("demos", blob_name, comp_name)
-                s3.remove_object("demos", comp_name)
+                minio_client.compose_object("demos", comp_name, composite_sources)
+                minio_client.copy_object("demos", blob_name, comp_name)
+                minio_client.remove_object("demos", comp_name)
                 return True
 
 
@@ -539,13 +541,13 @@ async def get_demo_oid(engine: AsyncEngine, session_id: str) -> int:
         return int(demo_oid)
 
 
-def demodata_helper(s3: Minio, session_id: str, chunk_size=5 << 20) -> Generator[bytes, None, None]:
+def demodata_helper(minio_client: Minio, session_id: str, chunk_size=5 << 20) -> Generator[bytes, None, None]:
     """Yield demo data in pages.
 
     Chunks default to 5MiB to keep peak mem constant on a per-session basis.
     """
     try:
-        response = s3.get_object("demos", demo_blob_name(session_id))
+        response = minio_client.get_object("demos", demo_blob_name(session_id))
         yield from response.read_chunked(chunk_size)
     finally:
         response.release_conn()
