@@ -542,7 +542,7 @@ async def get_demo_oid(engine: AsyncEngine, session_id: str) -> int:
 def demodata_helper(s3: Minio, session_id: str, chunk_size=5 << 20) -> Generator[bytes, None, None]:
     """Yield demo data in pages.
 
-    Chunks are 5MiB to keep peak mem constant on a per-session basis.
+    Chunks default to 5MiB to keep peak mem constant on a per-session basis.
     """
     try:
         response = s3.get_object("demos", demo_blob_name(session_id))
