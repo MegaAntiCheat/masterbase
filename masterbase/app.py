@@ -157,8 +157,9 @@ def list_demos(
 async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
     engine = request.app.state.async_engine
+    storage = request.app.state.minio_client
     size = await get_demo_size(engine, session_id)
-    bytestream_generator = demodata_helper(engine, session_id)
+    bytestream_generator = demodata_helper(storage, session_id)
     headers = {
         "Content-Disposition": f'attachment; filename="{session_id}.dem"',
         "Content-Length": size,
