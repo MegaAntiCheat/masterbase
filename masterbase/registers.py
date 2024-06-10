@@ -12,7 +12,7 @@ from masterbase.lib import make_db_uri, make_minio_client
 
 def get_minio_connection(app: Litestar) -> Minio:
     """Initialize and mount S3-compatible client, if not already attached."""
-    if not getattr(app.state, "s3", None):
+    if not getattr(app.state, "minio_client", None):
         minio_client = make_minio_client()
         if not minio_client.bucket_exists("demos"):
             minio_client.make_bucket("demos", "us-east-1")
