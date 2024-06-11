@@ -11,6 +11,7 @@ from litestar.testing import TestClient
 
 from masterbase.app import app
 from masterbase.lib import LATE_BYTES_END, LATE_BYTES_START
+from masterbase.models import ReportReason
 
 pytestmark = pytest.mark.integration
 
@@ -47,6 +48,28 @@ def test_client(steam_id: str, api_key: str) -> Iterator[TestClient[Litestar]]:
             sql = "DELETE FROM analyst_steam_ids WHERE steam_id = :steam_id;"
             conn.execute(sa.text(sql), {"steam_id": steam_id})
             conn.commit()
+
+
+def test_report_reasons_match(test_client: TestClient[Litestar]) -> None:
+    """Ensure that Pydantic report reasons match the postgres type registry."""
+    with test_client.app.state.engine.connect() as conn:
+        cursor = conn.execute(
+            sa.text(
+                """
+            SELECT enumlabel
+            FROM pg_enum
+            JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
+            WHERE pg_type.typname = 'report_reason';
+            """
+            )
+        )
+    db_reasons = next(zip(*cursor))
+    pd_reasons = tuple(variant.value for variant in ReportReason)
+    assert db_reasons == pd_reasons, (
+        "Database and Pydantic: ORM mismatch!"
+        + f"\n\tDatabase accepts {db_reasons}."
+        + f"\n\tPydantic accepts {pd_reasons}."
+    )
 
 
 def test_close_session_no_session(test_client: TestClient[Litestar], api_key: str) -> None:

@@ -178,7 +178,7 @@ async def report_player(request: Request, api_key: str, data: ReportBody) -> dic
     if not exists:
         raise PermissionDeniedException(detail="Unknown target_steam_id!")
     try:
-        add_report(engine, data.session_id, str(data.target_steam_id))
+        add_report(engine, data.session_id, str(data.target_steam_id), data.reason.value)
         return {"report_added": True}
     except IntegrityError as e:
         # case target_steam_id is already reported in that session
