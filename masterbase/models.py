@@ -8,8 +8,8 @@ from pydantic import BaseModel
 class ReportReason(str, Enum):
     """Valid reasons for reports."""
 
-    bot = "bot"
-    cheater = "cheater"
+    BOT = "bot"
+    CHEATER = "cheater"
 
 
 class ReportBody(BaseModel):
