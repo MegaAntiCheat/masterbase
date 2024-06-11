@@ -1,6 +1,15 @@
 """Module of pydantic models."""
 
+from enum import Enum
+
 from pydantic import BaseModel
+
+
+class ReportReason(str, Enum):
+    """Valid reasons for reports."""
+
+    BOT = "bot"
+    CHEATER = "cheater"
 
 
 class ReportBody(BaseModel):
@@ -8,6 +17,7 @@ class ReportBody(BaseModel):
 
     session_id: str
     target_steam_id: int
+    reason: ReportReason
 
 
 class LateBytesBody(BaseModel):

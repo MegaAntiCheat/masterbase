@@ -19,3 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Litestar API
 - PostgreSQL DB managed by alembic
+
+## v1.1.0 - 2024-06-07
+
+### Added
+
+- Reasons for player reports (cheater or bot)
