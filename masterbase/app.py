@@ -116,13 +116,15 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
     Returns:
         {"late_bytes": True}
     """
-    minio_client = request.app.state.minio_client
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
     steam_id = steam_id_from_api_key(engine, api_key)
     converted_late_bytes = bytes.fromhex(data.late_bytes)
-    added = late_bytes_helper(minio_client, engine, steam_id, converted_late_bytes, current_time)
-    return {"late_bytes": added}
+    added = late_bytes_helper(engine, steam_id, converted_late_bytes, current_time)
+    if added:
+        return {"late_bytes": True}
+    else:
+        raise HTTPException(detail="late bytes already submitted", status_code=422, extra={"late_bytes": False})
 
 
 @get("/analyst_list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
@@ -159,7 +161,7 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     engine = request.app.state.async_engine
     storage = request.app.state.minio_client
     size = await get_demo_size(engine, session_id)
-    bytestream_generator = demodata_helper(storage, session_id)
+    bytestream_generator = demodata_helper(request.app.state.engine, storage, session_id)
     headers = {
         "Content-Disposition": f'attachment; filename="{session_id}.dem"',
         "Content-Length": size,

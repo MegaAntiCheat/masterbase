@@ -349,12 +349,27 @@ def _close_session_with_demo(
     markov_score: float,
 ) -> None:
     """Close out a session in the DB, sink to MinIO."""
+
+    class ConcatStream:
+        def __init__(self, *streams):
+            self.streams = iter(streams)
+            self.current_stream = next(self.streams, None)
+
+        def read(self, size=-1):
+            if self.current_stream is None:
+                return b""
+            else:
+                data = self.current_stream.read(size)
+                if data == b"":  # End of current stream
+                    self.current_stream = next(self.streams, None)
+                    return self.read(size)
+
+                return data
+
     sink_path = demo_sink_path(session_id)
     size = os.stat(sink_path).st_size
-    minio_client.put_object
-    minio_client.fput_object("demos", demo_blob_name(session_id), sink_path)
     with engine.connect() as conn:
-        conn.execute(
+        late_bytes = conn.execute(
             sa.text(
                 """UPDATE demo_sessions
                 SET
@@ -368,6 +383,7 @@ def _close_session_with_demo(
                 WHERE
                 steam_id = :steam_id AND
                 session_id = :session_id
+                RETURNING late_bytes;
                 """
             ),
             {
@@ -379,7 +395,18 @@ def _close_session_with_demo(
                 "markov_score": markov_score,
                 "blob_name": demo_blob_name(session_id),
             },
-        )
+        ).scalar_one()
+        with open(sink_path, "rb") as sink:
+            late = io.BytesIO(late_bytes)
+            head = io.BytesIO(sink.read(LATE_BYTES_START))
+            sink.seek(LATE_BYTES_END, os.SEEK_SET)
+            minio_client.put_object(
+                "demos",
+                demo_blob_name(session_id),
+                data=ConcatStream(head, late, sink),
+                length=size,
+                metadata={"has_late_bytes": bool(late_bytes)},
+            )
         conn.commit()
 
 
@@ -460,7 +487,6 @@ def stat_demo_blob(minio_client: Minio, session_id: str) -> BlobStat:
 
 
 def late_bytes_helper(
-    minio_client: Minio,
     engine: Engine,
     steam_id: str,
     late_bytes: bytes,
@@ -468,7 +494,7 @@ def late_bytes_helper(
 ) -> bool:
     """Add late bytes to the database and blob storage.
 
-    No-ops and returns False if late bytes were found previously, True if they were absent.
+    No-ops and returns False if late bytes are found, True if they were absent.
     """
     with engine.connect() as conn:
         session_id, old_late_bytes = conn.execute(
@@ -482,8 +508,6 @@ def late_bytes_helper(
             ),
             {"steam_id": steam_id},
         ).one()
-        sink_path = None
-
         if session_id and old_late_bytes:
             return False
         else:
@@ -502,21 +526,7 @@ def late_bytes_helper(
                 },
             )
             conn.commit()
-            blob_name = demo_blob_name(session_id)
-            comp_name = f"{blob_name}.comp"
-            late_name = f"{blob_name}.late"
-            if stat_demo_blob(minio_client, session_id) is not None:
-                minio_client.fput_object("demos", blob_name, sink_path)
-                minio_client.put_object("demos", late_name, io.BytesIO(late_bytes), len(late_bytes))
-                composite_sources = [
-                    ComposeSource("demos", blob_name, length=LATE_BYTES_START - 1),
-                    ComposeSource("demos", late_name),
-                    ComposeSource("demos", blob_name, offset=LATE_BYTES_END),
-                ]
-                minio_client.compose_object("demos", comp_name, composite_sources)
-                minio_client.copy_object("demos", blob_name, comp_name)
-                minio_client.remove_object("demos", comp_name)
-                return True
+            return True
 
 
 async def get_demo_size(engine: AsyncEngine, session_id: str) -> str:
@@ -541,16 +551,38 @@ async def get_demo_oid(engine: AsyncEngine, session_id: str) -> int:
         return int(demo_oid)
 
 
-def demodata_helper(minio_client: Minio, session_id: str, chunk_size=5 << 20) -> Generator[bytes, None, None]:
+def demodata_helper(
+    engine: Engine, minio_client: Minio, session_id: str, chunk_size=5 << 20
+) -> Generator[bytes, None, None]:
     """Yield demo data in pages.
 
     Chunks default to 5MiB to keep peak mem constant on a per-session basis.
     """
-    try:
-        response = minio_client.get_object("demos", demo_blob_name(session_id))
-        yield from response.read_chunked(chunk_size)
-    finally:
-        response.release_conn()
+    total = 0
+    avail = None
+    blob_stat = stat_demo_blob(minio_client, session_id)
+    while avail is None or total <= avail:
+        try:
+            blob_exists = blob_stat is not None
+            inline_late_bytes = blob_exists and blob_stat.metadata.get("has_late_bytes", False)
+            is_first_chunk = avail is None
+            if is_first_chunk and not inline_late_bytes:
+                length = chunk_size - (LATE_BYTES_END - LATE_BYTES_START)
+            else:
+                length = chunk_size
+            response = minio_client.get_object("demos", demo_blob_name(session_id), length=length)
+            chunk = response.data
+            if is_first_chunk:
+                avail = int(response.headers.get("Content-Range").split("/")[1])
+                if not inline_late_bytes:
+                    with engine.connect() as conn:
+                        sql = "SELECT late_bytes FROM demo_sessions WHERE session_id = :session_id"
+                        late_bytes = conn.execute(sa.text(sql), {"session_id": session_id}).scalar_one()
+                        chunk = chunk[:LATE_BYTES_START] + late_bytes + chunk[LATE_BYTES_END:]
+            total += len(chunk)
+            yield chunk
+        finally:
+            response.release_conn()
 
 
 def list_demos_helper(

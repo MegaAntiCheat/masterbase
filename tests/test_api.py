@@ -86,9 +86,8 @@ def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None
     close_session_response = test_client.get("/close_session", params={"api_key": api_key})
     assert close_session_response.status_code == HTTP_200_OK
 
-    # this fails :(
-    with test_client.stream("GET", "/demodata", params={"api_key": api_key, "session_id": session_id}) as demo_stream:
-        demo_out = demo_stream.read()
+    with test_client.stream("GET", "/demodata", params={"api_key": api_key, "session_id": session_id}) as demo_response:
+        demo_out = b"".join(demo_response.iter_bytes())
 
     with open("tests/data/test_demo.dem", "rb") as f:
         demo_in = f.read()
