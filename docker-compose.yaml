@@ -42,9 +42,9 @@ services:
       STEAM_API_KEY: ${STEAM_API_KEY}
       POSTGRES_USER: MEGASCATTERBOMB
       POSTGRES_PASSWORD: masterbase
-      POSTGRES_HOST: db
+      POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
-      MINIO_HOST: localhost
+      MINIO_HOST: minio
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: MEGASCATTERBOMB
       MINIO_SECRET_KEY: masterbase
