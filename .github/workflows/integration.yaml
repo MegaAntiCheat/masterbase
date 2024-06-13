@@ -21,6 +21,15 @@ jobs:
         ports:
           - 8050:5432
 
+      minio:
+        image: minio/minio:edge-cicd
+        ports:
+          - 9000:9000
+        env:
+          MINIO_ROOT_USER: MEGASCATTERBOMB
+          MINIO_ROOT_PASSWORD: masterbase
+        options: --health-cmd "curl http://localhost:9000/minio/health/live"
+
     env:
       FORCE_COLOR: 1
       TERM: xterm-color
@@ -33,6 +42,15 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+
+      - name: Fetch mc client
+        run: wget https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x mc
+      - name: Create the bucket
+        run: ./mc alias set blobs http://127.0.0.1:9000 MEGASCATTERBOMB masterbase
+      - name: more minio bs
+        run: ./mc mb -p blobs/demos
+      - name: Remove mc client
+        run: rm -v ./mc
 
       - name: Install PDM
         run: |
@@ -51,4 +69,8 @@ jobs:
           POSTGRES_USER: MEGASCATTERBOMB
           POSTGRES_HOST: localhost
           POSTGRES_PORT: 8050
+          MINIO_HOST: localhost
+          MINIO_PORT: 9000
+          MINIO_ACCESS_KEY: MEGASCATTERBOMB
+          MINIO_SECRET_KEY: masterbase
           DEVELOPMENT: true

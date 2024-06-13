@@ -1,16 +1,19 @@
 """Library code for application."""
 
 import hashlib
+import io
 import logging
 import os
 import secrets
 import socket
 from datetime import datetime, timezone
-from typing import IO, Any, AsyncGenerator
+from typing import IO, Any, BinaryIO, cast
 from uuid import uuid4
 
 import sqlalchemy as sa
 from litestar import WebSocket
+from minio import Minio, S3Error
+from minio.datatypes import Object as BlobStat
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
@@ -31,7 +34,7 @@ def resolve_hostname(hosthame: str) -> str:
 
 
 def make_db_uri(is_async: bool = False) -> str:
-    """Correctly make the database URi."""
+    """Correctly make the database URI."""
     user = os.environ["POSTGRES_USER"]
     password = os.environ["POSTGRES_PASSWORD"]
     host = os.environ.get("POSTGRES_HOST", "localhost")
@@ -41,6 +44,35 @@ def make_db_uri(is_async: bool = False) -> str:
         prefix = f"{prefix}+asyncpg"
 
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
+
+
+def make_minio_client(is_secure: bool = False) -> Minio:
+    """Create and return an S3-compatible client handle."""
+    host, port, access_key, secret_key = map(
+        os.getenv, ("MINIO_HOST", "MINIO_PORT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY")
+    )
+    return Minio(f"{host}:{port}", access_key=access_key, secret_key=secret_key, secure=is_secure)
+
+
+class ConcatStream:
+    """Concat multiple filestreams."""
+
+    def __init__(self, *streams: IO[bytes]) -> None:
+        """Initialize the ConcatStream with multiple streams."""
+        self.streams = iter(streams)
+        self.current_stream: IO[bytes] | None = next(self.streams, None)
+
+    def read(self, size: int = -1) -> bytes:
+        """Read from the concatenated streams."""
+        if self.current_stream is None:
+            return b""
+
+        data = self.current_stream.read(size)
+        if data == b"":  # End of current stream
+            self.current_stream = next(self.streams, None)
+            return self.read(size)
+
+        return data
 
 
 class DemoSessionManager:
@@ -55,23 +87,24 @@ class DemoSessionManager:
         """
         self.session_id = session_id
         self.detection_state = detection_state
+        self.chunk_count = 0
 
     @property
     def demo_path(self) -> str:
         """Path of the demo for this session."""
-        return os.path.join(DEMOS_PATH, f"{self.session_id}.dem")
+        return demo_sink_path(self.session_id)
 
     def set_demo_handle(self, mode: str) -> None:
         """Open a handle with the mode at `self.demo_path`."""
         self.handle = open(self.demo_path, mode)
 
     def update(self, data: bytes) -> None:
-        """Write data to both handle and state objects."""
+        """Write data to both blob storage and state objects."""
         self.handle.write(data)
         self.detection_state.update(data)
 
     def disconnect(self) -> None:
-        """Close objects."""
+        """Close objects and consolidate data."""
         self.handle.close()
 
 
@@ -327,26 +360,33 @@ def _close_session_without_demo(engine: Engine, steam_id: str, current_time: dat
 
 
 def _close_session_with_demo(
-    engine: Engine, steam_id: str, session_id: str, current_time: datetime, demo_path: str, markov_score: float
+    minio_client: Minio,
+    engine: Engine,
+    steam_id: str,
+    session_id: str,
+    current_time: datetime,
+    markov_score: float,
 ) -> None:
-    """Close out a session in the DB."""
+    """Close out a session in the DB, sink to MinIO."""
+    sink_path = demo_sink_path(session_id)
+    size = os.stat(sink_path).st_size
     with engine.connect() as conn:
-        size = os.stat(demo_path).st_size
-        oid = conn.connection.lobject(mode="w", new_file=demo_path).oid  # type: ignore
-        conn.execute(
+        late_bytes = conn.execute(
             sa.text(
                 """UPDATE demo_sessions
                 SET
                 active = False,
                 open = False,
                 end_time = :end_time,
-                demo_oid = :demo_oid,
                 demo_size = :demo_size,
                 markov_score = :markov_score,
-                updated_at = :updated_at
+                updated_at = :updated_at,
+                blob_name = :blob_name
                 WHERE
                 steam_id = :steam_id AND
-                session_id = :session_id;"""
+                session_id = :session_id
+                RETURNING late_bytes;
+                """
             ),
             {
                 "steam_id": steam_id,
@@ -355,13 +395,26 @@ def _close_session_with_demo(
                 "updated_at": current_time.isoformat(),
                 "demo_size": size,
                 "markov_score": markov_score,
-                "demo_oid": oid,
+                "blob_name": demo_blob_name(session_id),
             },
-        )
+        ).scalar_one()
+        with open(sink_path, "rb") as sink:
+            late = io.BytesIO(late_bytes)
+            head = io.BytesIO(sink.read(LATE_BYTES_START))
+            sink.seek(LATE_BYTES_END, os.SEEK_SET)
+            minio_client.put_object(
+                "demos",
+                demo_blob_name(session_id),
+                data=cast(BinaryIO, ConcatStream(head, late, sink)),
+                length=size,
+                metadata={"has_late_bytes": str(bool(late_bytes))},
+            )
         conn.commit()
 
 
-def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType) -> str:
+def close_session_helper(
+    minio_client: Minio, engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType
+) -> str:
     """Properly close a session and return a summary message.
 
     Args:
@@ -392,11 +445,11 @@ def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: Sock
     else:
         if os.path.exists(session_manager.demo_path):
             _close_session_with_demo(
+                minio_client,
                 engine,
                 steam_id,
                 latest_session_id,
                 current_time,
-                session_manager.demo_path,
                 session_manager.detection_state.likelihood,
             )
             os.remove(session_manager.demo_path)
@@ -414,28 +467,68 @@ def close_session_helper(engine: Engine, steam_id: str, streaming_sessions: Sock
     return msg
 
 
-def late_bytes_helper(engine: Engine, steam_id: str, late_bytes: bytes, current_time: datetime) -> None:
-    """Add late bytes to the DB."""
+def demo_blob_name(session_id: str) -> str:
+    """Format the object name for a demo blob."""
+    return f"{session_id}.dem"
+
+
+def demo_sink_path(session_id: str) -> str:
+    """Format the media path for a demo blob."""
+    return os.path.join(DEMOS_PATH, demo_blob_name(session_id))
+
+
+def stat_demo_blob(minio_client: Minio, session_id: str) -> BlobStat | None:
+    """Return information on the status of a given blob if it exists, else None."""
+    try:
+        return minio_client.stat_object("demos", demo_blob_name(session_id))
+    except S3Error as err:
+        if err.code == "NoSuchKey":
+            return None
+        else:
+            raise
+
+
+def late_bytes_helper(
+    engine: Engine,
+    steam_id: str,
+    late_bytes: bytes,
+    current_time: datetime,
+) -> bool:
+    """Add late bytes to the database and blob storage.
+
+    No-ops and returns False if late bytes are found, True if they were absent.
+    """
     with engine.connect() as conn:
-        conn.execute(
+        session_id, old_late_bytes = conn.execute(
             sa.text(
-                """UPDATE demo_sessions
-                SET
-                late_bytes = :late_bytes,
-                updated_at = :updated_at
-                WHERE
-                steam_id = :steam_id
+                """SELECT session_id, late_bytes FROM demo_sessions
+                WHERE steam_id = :steam_id
                 AND updated_at = (
                     SELECT MAX(updated_at) FROM demo_sessions WHERE steam_id = :steam_id
-                );"""
+                );
+                """,
             ),
-            {
-                "steam_id": steam_id,
-                "late_bytes": late_bytes,
-                "updated_at": current_time.isoformat(),
-            },
-        )
-        conn.commit()
+            {"steam_id": steam_id},
+        ).one()
+        if session_id and old_late_bytes:
+            return False
+        else:
+            conn.execute(
+                sa.text(
+                    """UPDATE demo_sessions
+                        SET
+                        late_bytes = :late_bytes,
+                        updated_at = :updated_at
+                        WHERE session_id = session_id;"""
+                ),
+                {
+                    "session_id": session_id,
+                    "late_bytes": late_bytes,
+                    "updated_at": current_time.isoformat(),
+                },
+            )
+            conn.commit()
+            return True
 
 
 async def get_demo_size(engine: AsyncEngine, session_id: str) -> str:
@@ -446,54 +539,6 @@ async def get_demo_size(engine: AsyncEngine, session_id: str) -> str:
         size = result.scalar_one()
 
         return str(size)
-
-
-async def get_demo_oid(engine: AsyncEngine, session_id: str) -> int:
-    """Return the OID for a session."""
-    sql = """
-        SELECT demo_oid FROM demo_sessions WHERE session_id = :session_id;
-    """
-    async with engine.connect() as conn:
-        result = await conn.execute(sa.text(sql), dict(session_id=session_id))
-        demo_oid = result.scalar_one()
-
-        return int(demo_oid)
-
-
-async def demodata_helper(engine: AsyncEngine, session_id: str) -> AsyncGenerator[bytes, None]:
-    """Yield demo data page by page."""
-    demo_oid = await get_demo_oid(engine, session_id)
-    sql = """
-        SELECT pageno, data
-        FROM pg_largeobject
-        WHERE loid = :demo_oid
-        ORDER BY pageno;
-    """
-    async with engine.connect() as conn:
-        result = await conn.stream(sa.text(sql), dict(demo_oid=demo_oid))
-
-        first = True
-        while True:
-            row = await result.fetchone()
-            if row is None:
-                break
-
-            bytestream = row[1]
-
-            if first:
-                sql = "SELECT late_bytes from demo_sessions where session_id = :session_id;"
-                _late_bytes = await conn.execute(sa.text(sql), dict(session_id=session_id))
-                late_bytes = _late_bytes.scalar_one_or_none()
-                if late_bytes is None:
-                    logger.info(f"Session {session_id} has no late_bytes!")
-                    yield bytestream
-                else:
-                    # bytesurgeon >:D
-                    bytestream = bytestream[:LATE_BYTES_START] + late_bytes + bytestream[LATE_BYTES_END:]
-                    yield bytestream
-                first = False
-            else:
-                yield bytestream
 
 
 def list_demos_helper(

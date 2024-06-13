@@ -10,7 +10,7 @@ import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
-from litestar.response import Redirect, Stream
+from litestar.response import Redirect
 from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
@@ -35,10 +35,9 @@ from masterbase.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     close_session_helper,
-    demodata_helper,
+    demo_blob_name,
     generate_api_key,
     generate_uuid4_int,
-    get_demo_size,
     late_bytes_helper,
     list_demos_helper,
     provision_api_key,
@@ -98,10 +97,11 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     Returns:
         {"closed_successfully": True}
     """
+    minio_client = request.app.state.minio_client
     engine = request.app.state.engine
 
     steam_id = steam_id_from_api_key(engine, api_key)
-    msg = close_session_helper(engine, steam_id, streaming_sessions)
+    msg = close_session_helper(minio_client, engine, steam_id, streaming_sessions)
     logger.info(msg)
 
     return {"closed_successfully": True}
@@ -109,7 +109,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
 @post("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
 def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
-    """Add late bytes to a closed demo session..
+    """Add late bytes to a closed demo session.
 
     Returns:
         {"late_bytes": True}
@@ -118,9 +118,11 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
     current_time = datetime.now().astimezone(timezone.utc)
     steam_id = steam_id_from_api_key(engine, api_key)
     converted_late_bytes = bytes.fromhex(data.late_bytes)
-    late_bytes_helper(engine, steam_id, converted_late_bytes, current_time)
-
-    return {"late_bytes": True}
+    added = late_bytes_helper(engine, steam_id, converted_late_bytes, current_time)
+    if added:
+        return {"late_bytes": True}
+    else:
+        raise HTTPException(detail="late bytes already submitted", status_code=422, extra={"late_bytes": False})
 
 
 @get("/analyst_list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
@@ -152,16 +154,15 @@ def list_demos(
 
 
 @get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard])
-async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
+async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
     """Return the demo."""
-    engine = request.app.state.async_engine
-    size = await get_demo_size(engine, session_id)
-    bytestream_generator = demodata_helper(engine, session_id)
-    headers = {
-        "Content-Disposition": f'attachment; filename="{session_id}.dem"',
-        "Content-Length": size,
-    }
-    return Stream(bytestream_generator, media_type=MediaType.TEXT, headers=headers)
+    minio_client = request.app.state.minio_client
+    url = minio_client.presigned_get_object("demos", demo_blob_name(session_id))
+    return Redirect(
+        path=url,
+        status_code=303,
+        headers={"Content-Type": "application/octet-stream"},
+    )
 
 
 @post("/report", guards=[valid_key_guard])
