@@ -6,8 +6,18 @@ on:
       - main
 
 jobs:
+  build-minio:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build MinIO Docker image
+        run: |
+          docker build -t my-minio:latest -f ./services/minio/Dockerfile .
+
   Test:
     runs-on: ubuntu-latest
+
+    needs: build-minio
 
     services:
       postgres:
@@ -22,18 +32,15 @@ jobs:
           - 8050:5432
 
       minio:
-        build:
-          context: .
-          dockerfile: ./services/minio/Dockerfile
-        container_name: minio
+        image: my-minio:latest
         ports:
           - 9000:9000
           - 9001:9001
         env:
           MINIO_ROOT_USER: MEGASCATTERBOMB
           MINIO_ROOT_PASSWORD: masterbase
-        volumes:
-          - demo_data:/blobs/
+        options: >
+          --mount type=volume,source=demo_data,target=/blobs/
 
     env:
       FORCE_COLOR: 1
