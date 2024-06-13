@@ -4,6 +4,7 @@ import time
 from typing import Iterator
 
 import pytest
+import requests
 import sqlalchemy as sa
 from litestar import Litestar
 from litestar.status_codes import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
@@ -109,8 +110,9 @@ def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None
     close_session_response = test_client.get("/close_session", params={"api_key": api_key})
     assert close_session_response.status_code == HTTP_200_OK
 
-    with test_client.stream("GET", "/demodata", params={"api_key": api_key, "session_id": session_id}) as demo_response:
-        demo_out = b"".join(demo_response.iter_bytes())
+    response = test_client.get("/demodata", params={"api_key": api_key, "session_id": session_id})
+    redirect = response.url
+    demo_out = requests.get(redirect).content
 
     with open("tests/data/test_demo.dem", "rb") as f:
         demo_in = f.read()

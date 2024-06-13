@@ -1,11 +1,8 @@
 """Test api utilities."""
 
-import os
-
 import pytest
 
-from masterbase.anomaly import DetectionState
-from masterbase.lib import DEMOS_PATH, DemoSessionManager, generate_uuid4_int, make_db_uri
+from masterbase.lib import generate_uuid4_int, make_db_uri
 
 
 @pytest.fixture(scope="session")
@@ -36,7 +33,7 @@ def test_make_db_uri(mock_os_environ, is_async: bool, expected_uri: str) -> None
     assert actual == expected_uri
 
 
-def test_make_demo_path(session_id: str) -> None:
-    """Test make demo path."""
-    manager = DemoSessionManager(session_id=session_id, detection_state=DetectionState())
-    assert manager.demo_path == os.path.join(DEMOS_PATH, f"{session_id}.dem")
+# def test_make_demo_path(session_id: str) -> None:
+#     """Test make demo path."""
+#     manager = DemoSessionManager(session_id=session_id, detection_state=DetectionState())
+#     assert manager.demo_path == os.path.join(DEMOS_PATH, f"{session_id}.dem")

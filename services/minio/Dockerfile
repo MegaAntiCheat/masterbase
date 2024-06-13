@@ -10,7 +10,8 @@ ENV MINIO_ROOT_PASSWORD=masterbase
 EXPOSE 9000
 EXPOSE 9001
 
-COPY services/s3/start.sh /usr/local/bin/start.sh
+
+COPY services/minio/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
 ENTRYPOINT /usr/local/bin/start.sh

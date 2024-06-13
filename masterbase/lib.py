@@ -7,13 +7,12 @@ import os
 import secrets
 import socket
 from datetime import datetime, timezone
-from typing import IO, Any, Generator
+from typing import IO, Any, BinaryIO, cast
 from uuid import uuid4
 
 import sqlalchemy as sa
 from litestar import WebSocket
 from minio import Minio, S3Error
-from minio.commonconfig import ComposeSource
 from minio.datatypes import Object as BlobStat
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -55,10 +54,31 @@ def make_minio_client(is_secure: bool = False) -> Minio:
     return Minio(f"{host}:{port}", access_key=access_key, secret_key=secret_key, secure=is_secure)
 
 
+class ConcatStream:
+    """Concat multiple filestreams."""
+
+    def __init__(self, *streams: IO[bytes]) -> None:
+        """Initialize the ConcatStream with multiple streams."""
+        self.streams = iter(streams)
+        self.current_stream: IO[bytes] | None = next(self.streams, None)
+
+    def read(self, size: int = -1) -> bytes:
+        """Read from the concatenated streams."""
+        if self.current_stream is None:
+            return b""
+
+        data = self.current_stream.read(size)
+        if data == b"":  # End of current stream
+            self.current_stream = next(self.streams, None)
+            return self.read(size)
+
+        return data
+
+
 class DemoSessionManager:
     """Helper class to facilitate access."""
 
-    def __init__(self, minio_client: Minio, session_id: str, detection_state: DetectionState) -> None:
+    def __init__(self, session_id: str, detection_state: DetectionState) -> None:
         """Create a demo session manager.
 
         Args:
@@ -68,7 +88,6 @@ class DemoSessionManager:
         self.session_id = session_id
         self.detection_state = detection_state
         self.chunk_count = 0
-        self.minio_client = minio_client
 
     @property
     def demo_path(self) -> str:
@@ -349,23 +368,6 @@ def _close_session_with_demo(
     markov_score: float,
 ) -> None:
     """Close out a session in the DB, sink to MinIO."""
-
-    class ConcatStream:
-        def __init__(self, *streams):
-            self.streams = iter(streams)
-            self.current_stream = next(self.streams, None)
-
-        def read(self, size=-1):
-            if self.current_stream is None:
-                return b""
-            else:
-                data = self.current_stream.read(size)
-                if data == b"":  # End of current stream
-                    self.current_stream = next(self.streams, None)
-                    return self.read(size)
-
-                return data
-
     sink_path = demo_sink_path(session_id)
     size = os.stat(sink_path).st_size
     with engine.connect() as conn:
@@ -403,9 +405,9 @@ def _close_session_with_demo(
             minio_client.put_object(
                 "demos",
                 demo_blob_name(session_id),
-                data=ConcatStream(head, late, sink),
+                data=cast(BinaryIO, ConcatStream(head, late, sink)),
                 length=size,
-                metadata={"has_late_bytes": bool(late_bytes)},
+                metadata={"has_late_bytes": str(bool(late_bytes))},
             )
         conn.commit()
 
@@ -475,7 +477,7 @@ def demo_sink_path(session_id: str) -> str:
     return os.path.join(DEMOS_PATH, demo_blob_name(session_id))
 
 
-def stat_demo_blob(minio_client: Minio, session_id: str) -> BlobStat:
+def stat_demo_blob(minio_client: Minio, session_id: str) -> BlobStat | None:
     """Return information on the status of a given blob if it exists, else None."""
     try:
         return minio_client.stat_object("demos", demo_blob_name(session_id))
@@ -537,52 +539,6 @@ async def get_demo_size(engine: AsyncEngine, session_id: str) -> str:
         size = result.scalar_one()
 
         return str(size)
-
-
-async def get_demo_oid(engine: AsyncEngine, session_id: str) -> int:
-    """Return the OID for a session."""
-    sql = """
-        SELECT demo_oid FROM demo_sessions WHERE session_id = :session_id;
-    """
-    async with engine.connect() as conn:
-        result = await conn.execute(sa.text(sql), dict(session_id=session_id))
-        demo_oid = result.scalar_one()
-
-        return int(demo_oid)
-
-
-def demodata_helper(
-    engine: Engine, minio_client: Minio, session_id: str, chunk_size=5 << 20
-) -> Generator[bytes, None, None]:
-    """Yield demo data in pages.
-
-    Chunks default to 5MiB to keep peak mem constant on a per-session basis.
-    """
-    total = 0
-    avail = None
-    blob_stat = stat_demo_blob(minio_client, session_id)
-    while avail is None or total <= avail:
-        try:
-            blob_exists = blob_stat is not None
-            inline_late_bytes = blob_exists and blob_stat.metadata.get("has_late_bytes", False)
-            is_first_chunk = avail is None
-            if is_first_chunk and not inline_late_bytes:
-                length = chunk_size - (LATE_BYTES_END - LATE_BYTES_START)
-            else:
-                length = chunk_size
-            response = minio_client.get_object("demos", demo_blob_name(session_id), length=length)
-            chunk = response.data
-            if is_first_chunk:
-                avail = int(response.headers.get("Content-Range").split("/")[1])
-                if not inline_late_bytes:
-                    with engine.connect() as conn:
-                        sql = "SELECT late_bytes FROM demo_sessions WHERE session_id = :session_id"
-                        late_bytes = conn.execute(sa.text(sql), {"session_id": session_id}).scalar_one()
-                        chunk = chunk[:LATE_BYTES_START] + late_bytes + chunk[LATE_BYTES_END:]
-            total += len(chunk)
-            yield chunk
-        finally:
-            response.release_conn()
 
 
 def list_demos_helper(

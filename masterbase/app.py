@@ -10,8 +10,7 @@ import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
-from litestar.response import Redirect, Stream
-from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
+from litestar.response import Redirect
 from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
@@ -36,10 +35,9 @@ from masterbase.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     close_session_helper,
-    demodata_helper,
+    demo_blob_name,
     generate_api_key,
     generate_uuid4_int,
-    get_demo_size,
     late_bytes_helper,
     list_demos_helper,
     provision_api_key,
@@ -156,17 +154,15 @@ def list_demos(
 
 
 @get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard])
-async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
+async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
     """Return the demo."""
-    engine = request.app.state.async_engine
-    storage = request.app.state.minio_client
-    size = await get_demo_size(engine, session_id)
-    bytestream_generator = demodata_helper(request.app.state.engine, storage, session_id)
-    headers = {
-        "Content-Disposition": f'attachment; filename="{session_id}.dem"',
-        "Content-Length": size,
-    }
-    return Stream(bytestream_generator, media_type=MediaType.TEXT, headers=headers)
+    minio_client = request.app.state.minio_client
+    url = minio_client.presigned_get_object("demos", demo_blob_name(session_id))
+    return Redirect(
+        path=url,
+        status_code=303,
+        headers={"Content-Type": "application/octet-stream"},
+    )
 
 
 @post("/report", guards=[valid_key_guard])
@@ -199,7 +195,6 @@ class DemoHandler(WebsocketListener):
     async def on_accept(self, socket: WebSocket, api_key: str, session_id: str) -> None:  # type: ignore
         """Accept a user and create handle."""
         engine = socket.app.state.async_engine
-        minio_client = socket.app.state.minio_client
         exists = await check_key_exists(engine, api_key)
         if not exists:
             logger.info("Invalid API key, closing!")
@@ -218,9 +213,7 @@ class DemoHandler(WebsocketListener):
 
         await set_open_true(engine, steam_id, session_id)
 
-        session_manager = DemoSessionManager(
-            minio_client=minio_client, session_id=session_id, detection_state=DetectionState()
-        )
+        session_manager = DemoSessionManager(session_id=session_id, detection_state=DetectionState())
 
         if os.path.exists(session_manager.demo_path):
             mode = "ab"
@@ -371,15 +364,6 @@ def provision_handler(request: Request) -> str:
         """
 
 
-if os.getenv("DEVELOPMENT"):
-
-    def _reraise(req, err):
-        raise ValueError(req) from err
-
-    exception_handlers = {HTTP_500_INTERNAL_SERVER_ERROR: _reraise}
-else:
-    exception_handlers = {}
-
 app = Litestar(
     on_startup=startup_registers,
     route_handlers=[
@@ -394,7 +378,6 @@ app = Litestar(
         analyst_list_demos,
         report_player,
     ],
-    exception_handlers=exception_handlers,
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )

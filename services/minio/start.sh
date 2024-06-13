@@ -1,4 +1,4 @@
-minio server /blobs --console-address :9001 & 
+minio server /blobs --console-address :9001 &
 S3_PID=$!
 
 until curl --output /dev/null --silent --head --fail http://localhost:9000; do
