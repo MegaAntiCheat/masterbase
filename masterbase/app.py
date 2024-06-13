@@ -155,7 +155,7 @@ def list_demos(
     return demos
 
 
-@get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard])
+@get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard], sync_to_thread=False)
 def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
     """Return the demo."""
     minio_client = request.app.state.minio_client
@@ -167,7 +167,7 @@ def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
     )
 
 
-@get("/db_export", guards=[valid_key_guard, analyst_guard])
+@get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=True)
 def db_export(request: Request, api_key: str) -> Redirect:
     """Allow the client to download a DB export if it exists; otherwise, 503."""
     minio_client = request.app.state.minio_client
