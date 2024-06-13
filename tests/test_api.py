@@ -111,7 +111,7 @@ def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None
     assert close_session_response.status_code == HTTP_200_OK
 
     response = test_client.get("/demodata", params={"api_key": api_key, "session_id": session_id})
-    redirect = response.url
+    redirect = str(response.url)
     demo_out = requests.get(redirect).content
 
     with open("tests/data/test_demo.dem", "rb") as f:
