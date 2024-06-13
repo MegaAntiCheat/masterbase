@@ -24,7 +24,7 @@ def upgrade() -> None:
         CREATE TYPE report_reason AS ENUM ('bot', 'cheater');
 
         ALTER TABLE reports
-        ADD COLUMN report report_reason;
+        ADD COLUMN reason report_reason;
         """
     )
 
