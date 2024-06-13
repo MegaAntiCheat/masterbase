@@ -25,10 +25,10 @@ jobs:
         image: lazybit/minio
         ports:
           - 9000:9000
-          - 9001:9001
         env:
           MINIO_ROOT_USER: MEGASCATTERBOMB
           MINIO_ROOT_PASSWORD: masterbase
+        options: --name=minio --health-cmd "curl http://localhost:9000/minio/health/live"
 
     env:
       FORCE_COLOR: 1
@@ -46,7 +46,7 @@ jobs:
       - name: wait for minio
         run: sleep 10
       - name: Fetch mc client
-        run: curl -o ./mc -# https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x ./mc
+        run: wget https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x mc
       - name: Create the bucket
         run: ./mc alias set blobs http://127.0.0.1:9000 MEGASCATTERBOMB masterbase && ./mc mb -p blobs/demos
       - name: Remove mc client
