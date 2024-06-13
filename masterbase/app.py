@@ -11,7 +11,6 @@ from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect
-from minio import S3Error
 from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
@@ -37,7 +36,6 @@ from masterbase.lib import (
     check_steam_id_is_beta_tester,
     close_session_helper,
     demo_blob_name,
-    export_database,
     generate_api_key,
     generate_uuid4_int,
     late_bytes_helper,
@@ -48,7 +46,6 @@ from masterbase.lib import (
     set_open_true,
     start_session_helper,
     stat_db_export,
-    stat_demo_blob,
     steam_id_from_api_key,
     time_until_next_export,
     update_api_key,
