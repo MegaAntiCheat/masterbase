@@ -21,7 +21,7 @@ jobs:
         ports:
           - 8050:5432
 
-      minio:
+      s3:
         image: minio/minio:RELEASE.2024-06-06T09-36-42Z
         ports:
           - 9000:9000
@@ -46,7 +46,7 @@ jobs:
       - name: Fetch mc client
         run: curl -o ./mc -# https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x ./mc
       - name: Create the bucket
-        run: ./mc alias set blobs http://minio:9000 MEGASCATTERBOMB masterbase && ./mc mb -p blobs/demos
+        run: ./mc alias set blobs http://s3:9000 MEGASCATTERBOMB masterbase && ./mc mb -p blobs/demos
       - name: Remove mc client
         run: rm -v ./mc
 
