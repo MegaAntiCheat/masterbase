@@ -29,9 +29,6 @@ jobs:
         env:
           MINIO_ROOT_USER: MEGASCATTERBOMB
           MINIO_ROOT_PASSWORD: masterbase
-        run: |
-          mc alias set blobs http://localhost:9000 MEGASCATTERBOMB masterbase
-          mc mb -p blobs/demos
 
     env:
       FORCE_COLOR: 1
