@@ -67,11 +67,14 @@ def db_export_chunks(engine: Engine) -> Generator[bytes, None, None]:
         def write(self, data):
             channel.send(data)
 
-    with engine.raw_connection() as conn:
+    try:
+        conn = engine.raw_connection()
         cursor = conn.cursor()
         cursor.copy_expert("COPY 'demo_sessions' TO STDOUT WITH CSV HEADER", Sender())
         conn.commit()
         yield from channel
+    finally:
+        conn.close()
 
 
 def db_export_cached(
