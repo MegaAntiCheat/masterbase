@@ -22,13 +22,13 @@ jobs:
           - 8050:5432
 
       minio:
-        image: lazybit/minio
+        image: minio/minio:edge-cicd
         ports:
           - 9000:9000
         env:
           MINIO_ROOT_USER: MEGASCATTERBOMB
           MINIO_ROOT_PASSWORD: masterbase
-        options: --name=minio --health-cmd "curl http://localhost:9000/minio/health/live"
+        options: --health-cmd "curl http://localhost:9000/minio/health/live"
 
     env:
       FORCE_COLOR: 1
@@ -43,12 +43,12 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: wait for minio
-        run: sleep 10
       - name: Fetch mc client
         run: wget https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x mc
       - name: Create the bucket
-        run: ./mc alias set blobs http://127.0.0.1:9000 MEGASCATTERBOMB masterbase && ./mc mb -p blobs/demos
+        run: ./mc alias set blobs http://127.0.0.1:9000 MEGASCATTERBOMB masterbase
+      - name: more minio bs
+        run: ./mc mb -p blobs/demos
       - name: Remove mc client
         run: rm -v ./mc
 
