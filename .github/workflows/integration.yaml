@@ -46,6 +46,13 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Fetch mc client
+        run: curl -o ./mc -# https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x ./mc
+      - name: Create the bucket
+        run: ./mc alias set blobs http://localhost:9000 MEGASCATTERBOMB masterbase && ./mc mb -p blobs/demos
+      - name: Remove mc client
+        run: rm -v ./mc
+
       - name: Install PDM
         run: |
           python -m pip install --upgrade pip
