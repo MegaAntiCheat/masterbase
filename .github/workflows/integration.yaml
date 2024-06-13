@@ -22,7 +22,7 @@ jobs:
           - 8050:5432
 
       minio:
-        image: minio/minio:RELEASE.2024-06-06T09-36-42Z
+        image: minio/minio:edge-cicd
         ports:
           - 9000:9000
           - 9001:9001
