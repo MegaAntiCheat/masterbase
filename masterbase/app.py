@@ -169,6 +169,8 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
 @get("/db_export", guards=[valid_key_guard, analyst_guard])
 def db_export(request: Request, api_key: str, max_age: int) -> Stream:
     """Return a database export from within the last `max_age` seconds."""
+    if max_age < 300:
+        raise HTTPException(status_code=404, detail="`max_age` must be >= 300.")
     engine = request.app.state.engine
     filename = f"demo_sessions-{datetime.now()}.csv"
     return Stream(
