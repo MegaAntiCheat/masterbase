@@ -49,7 +49,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
-from masterbase.models import LateBytesBody, ReportBody
+from masterbase.models import DBExportBody, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -167,14 +167,12 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
 
 
 @get("/db_export", guards=[valid_key_guard, analyst_guard])
-def db_export(request: Request, api_key: str, max_age: int) -> Stream:
+def db_export(request: Request, api_key: str, data: DBExportBody) -> Stream:
     """Return a database export from within the last `max_age` seconds."""
-    if max_age < 300:
-        raise HTTPException(status_code=404, detail="`max_age` must be >= 300.")
     engine = request.app.state.engine
     filename = f"demo_sessions-{datetime.now()}.csv"
     return Stream(
-        db_export_cached(engine, max_age),
+        db_export_cached(engine, data.table, data.max_age),
         headers={
             "Content-Type": "text/csv",
             "Content-Disposition": f"attachment; filename={filename}",

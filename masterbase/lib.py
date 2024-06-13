@@ -54,8 +54,8 @@ def make_minio_client(is_secure: bool = False) -> Minio:
     return Minio(f"{host}:{port}", access_key=access_key, secret_key=secret_key, secure=is_secure)
 
 
-def db_export_chunks(engine: Engine) -> Generator[bytes, None, None]:
-    """Export the 'demo_sessions' table as an iterable of csv chunks."""
+def db_export_chunks(engine: Engine, table: str) -> Generator[bytes, None, None]:
+    """Export the given table as an iterable of csv chunks."""
 
     def _receiver():
         data = yield
@@ -70,7 +70,7 @@ def db_export_chunks(engine: Engine) -> Generator[bytes, None, None]:
     try:
         conn = engine.raw_connection()
         cursor = conn.cursor()
-        cursor.copy_expert("COPY 'demo_sessions' TO STDOUT WITH CSV HEADER", Sender())
+        cursor.copy_expert(f"COPY '{table}' TO STDOUT WITH CSV HEADER", Sender())
         conn.commit()
         yield from channel
     finally:
@@ -78,9 +78,13 @@ def db_export_chunks(engine: Engine) -> Generator[bytes, None, None]:
 
 
 def db_export_cached(
-    engine: Engine, cache_max_age: int, cache_name: str = "/tmp/demo_sessions.csv"
+    engine: Engine,
+    table: str,
+    cache_max_age: int,
+    cache_name: str | None = None,
 ) -> Generator[bytes, None, None]:
-    """Export the demo_sessions table, with a filesystem cache at cache_path."""
+    """Export an arbitrary table, with a filesystem cache at cache_path."""
+    cache_name = cache_name or f"/tmp/{table}.csv"
     try:
         unix_time = (datetime.now() - datetime(1970, 1, 1)).total_seconds()
         cache_age = unix_time - os.stat(cache_name).st_mtime
@@ -92,8 +96,8 @@ def db_export_cached(
         with open(cache_name, "rb") as istrm:
             yield from iter(lambda: istrm.read(5 << 20), b"")
     else:
-        with open("/tmp/demo_sessions.csv", "wb+") as cache:
-            for chunk in db_export_chunks(engine):
+        with open(cache_name, "wb+") as cache:
+            for chunk in db_export_chunks(engine, table):
                 cache.write(chunk)
                 yield chunk
 
