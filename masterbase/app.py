@@ -50,7 +50,7 @@ from masterbase.lib import (
     time_until_next_export,
     update_api_key,
 )
-from masterbase.models import LateBytesBody, ReportBody
+from masterbase.models import DBExportBody, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -168,10 +168,10 @@ def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
 
 
 @get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=True)
-def db_export(request: Request, api_key: str) -> Redirect:
+def db_export(request: Request, api_key: str, data: DBExportBody) -> Redirect:
     """Allow the client to download a DB export if it exists; otherwise, 503."""
     minio_client = request.app.state.minio_client
-    if stat_db_export(minio_client) is not None:
+    if stat_db_export(minio_client, data.table) is not None:
         url = minio_client.presigned_get_object("db_exports", "demo_sessions.csv.gz")
         return Redirect(
             path=url,

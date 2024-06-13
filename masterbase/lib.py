@@ -47,9 +47,9 @@ def make_db_uri(is_async: bool = False) -> str:
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
 
 
-def export_database():
+def export_database(table: str):
     """Run the database export script."""
-    return sp.run(["/usr/local/bin/export_db.sh"])
+    return sp.run(["/usr/local/bin/export_db.sh", table]).check_returncode()
 
 
 def time_until_next_export(grace_period: timedelta = timedelta(minutes=30)):
@@ -497,7 +497,7 @@ def demo_sink_path(session_id: str) -> str:
     return os.path.join(DEMOS_PATH, demo_blob_name(session_id))
 
 
-def stat_db_export(minio_client: Minio, table) -> BlobStat | None:
+def stat_db_export(minio_client: Minio, table: str) -> BlobStat | None:
     """Return information on the status of the given table's export if it exists, else None."""
     try:
         return minio_client.stat_object("db_export", f"{table}.csv.gz")
