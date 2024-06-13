@@ -2,7 +2,7 @@
 
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ReportReason(str, Enum):
@@ -18,6 +18,20 @@ class ReportBody(BaseModel):
     session_id: str
     target_steam_id: int
     reason: ReportReason
+
+
+class ExportTable(str, Enum):
+    """Tables to be allowed in database exports."""
+
+    DEMOS = "demo_sessions"
+    REPORTS = "reports"
+
+
+class DBExportBody(BaseModel):
+    """Request body for a database export."""
+
+    table: ExportTable
+    max_age: int = Field(ge=300)
 
 
 class LateBytesBody(BaseModel):
