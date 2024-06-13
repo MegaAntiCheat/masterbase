@@ -8,6 +8,7 @@ done
 if [ -f /first_run ]; then
     mc alias set blobs http://localhost:9000 MEGASCATTERBOMB masterbase
     mc mb -p blobs/demos
+    mc mb -p blobs/db_exports
     rm /first_run
 fi
 

@@ -20,7 +20,14 @@ services:
       context: .
       dockerfile: ./services/db/Dockerfile
     container_name: db
+    depends_on:
+      - s3
     environment:
+      MINIO_HOST: s3
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: MEGASCATTERBOMB
+      MINIO_SECRET_KEY: masterbase
+
       POSTGRES_USER: MEGASCATTERBOMB
       POSTGRES_PASSWORD: masterbase
       POSTGRES_DB: demos
