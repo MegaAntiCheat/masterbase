@@ -172,7 +172,7 @@ def db_export(request: Request, api_key: str) -> Redirect:
     """Allow the client to download a DB export if it exists; otherwise, 503."""
     minio_client = request.app.state.minio_client
     if stat_db_export(minio_client) is not None:
-        url = minio_client.presigned_get_object("demos", demo_blob_name(session_id))
+        url = minio_client.presigned_get_object("db_exports", "demo_sessions.csv.gz")
         return Redirect(
             path=url,
             status_code=303,

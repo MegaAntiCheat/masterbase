@@ -62,8 +62,8 @@ def time_until_next_export(grace_period: timedelta = timedelta(minutes=30)):
     From: https://stackoverflow.com/a/45986036
     """
     now = datetime.now()
-    tomorrow = now + datetime.timedelta(days=1)
-    return datetime.combine(tomorrow, datetime.min) - now + grace_period
+    tomorrow = now + timedelta(days=1)
+    return datetime.combine(tomorrow, datetime.min.time) - now + grace_period
 
 
 def make_minio_client(is_secure: bool = False) -> Minio:
