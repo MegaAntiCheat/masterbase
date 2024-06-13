@@ -10,7 +10,7 @@ import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
-from litestar.response import Redirect
+from litestar.response import Redirect, Stream
 from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
@@ -35,6 +35,7 @@ from masterbase.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     close_session_helper,
+    db_export_cached,
     demo_blob_name,
     generate_api_key,
     generate_uuid4_int,
@@ -162,6 +163,20 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
         path=url,
         status_code=303,
         headers={"Content-Type": "application/octet-stream"},
+    )
+
+
+@get("/db_export", guards=[valid_key_guard, analyst_guard])
+def db_export(request: Request, api_key: str, max_age: int) -> Stream:
+    """Return a database export from within the last `max_age` seconds."""
+    engine = request.app.state.engine
+    filename = f"demo_sessions-{datetime.now()}.csv"
+    return Stream(
+        db_export_cached(engine, max_age),
+        headers={
+            "Content-Type": "text/csv",
+            "Content-Disposition": f"attachment; filename={filename}",
+        },
     )
 
 

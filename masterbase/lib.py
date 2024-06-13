@@ -7,7 +7,7 @@ import os
 import secrets
 import socket
 from datetime import datetime, timezone
-from typing import IO, Any, BinaryIO, cast
+from typing import IO, Any, BinaryIO, Generator, cast
 from uuid import uuid4
 
 import sqlalchemy as sa
@@ -52,6 +52,47 @@ def make_minio_client(is_secure: bool = False) -> Minio:
         os.getenv, ("MINIO_HOST", "MINIO_PORT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY")
     )
     return Minio(f"{host}:{port}", access_key=access_key, secret_key=secret_key, secure=is_secure)
+
+
+def db_export_chunks(engine: Engine) -> Generator[bytes, None, None]:
+    """Export the 'demo_sessions' table as an iterable of csv chunks."""
+
+    def _receiver():
+        data = yield
+        yield data
+
+    channel = _receiver()
+
+    class Sender:
+        def write(self, data):
+            channel.send(data)
+
+    with engine.raw_connection() as conn:
+        cursor = conn.cursor()
+        cursor.copy_expert("COPY 'demo_sessions' TO STDOUT WITH CSV HEADER", Sender())
+        conn.commit()
+        yield from channel
+
+
+def db_export_cached(
+    engine: Engine, cache_max_age: int, cache_name: str = "/tmp/demo_sessions.csv"
+) -> Generator[bytes, None, None]:
+    """Export the demo_sessions table, with a filesystem cache at cache_path."""
+    try:
+        unix_time = (datetime.now() - datetime(1970, 1, 1)).total_seconds()
+        cache_age = unix_time - os.stat(cache_name).st_mtime
+        cache_hit = cache_age <= cache_max_age
+    except FileNotFoundError:
+        cache_hit = False
+
+    if cache_hit:
+        with open(cache_name, "rb") as istrm:
+            yield from iter(lambda: istrm.read(5 << 20), b"")
+    else:
+        with open("/tmp/demo_sessions.csv", "wb+") as cache:
+            for chunk in db_export_chunks(engine):
+                cache.write(chunk)
+                yield chunk
 
 
 class ConcatStream:
