@@ -6,7 +6,8 @@ import logging
 import os
 import secrets
 import socket
-from datetime import datetime, timezone
+import subprocess as sp
+from datetime import datetime, timedelta, timezone
 from typing import IO, Any, BinaryIO, cast
 from uuid import uuid4
 
@@ -44,6 +45,25 @@ def make_db_uri(is_async: bool = False) -> str:
         prefix = f"{prefix}+asyncpg"
 
     return f"{prefix}://{user}:{password}@{host}:{port}/demos"
+
+
+def export_database():
+    """Run the database export script."""
+    return sp.run(["/usr/local/bin/db_export.sh"])
+
+
+def time_until_next_export(grace_period: timedelta = timedelta(minutes=30)):
+    """
+    Get timedelta until end of day on the datetime passed, or current time.
+
+    Args:
+        grace_period: Additional delay to allow the export to complete.
+
+    From: https://stackoverflow.com/a/45986036
+    """
+    now = datetime.now()
+    tomorrow = now + datetime.timedelta(days=1)
+    return datetime.combine(tomorrow, datetime.min) - now + grace_period
 
 
 def make_minio_client(is_secure: bool = False) -> Minio:
@@ -475,6 +495,17 @@ def demo_blob_name(session_id: str) -> str:
 def demo_sink_path(session_id: str) -> str:
     """Format the media path for a demo blob."""
     return os.path.join(DEMOS_PATH, demo_blob_name(session_id))
+
+
+def stat_db_export(minio_client: Minio) -> BlobStat | None:
+    """Return information on the status of the database export if it exists, else None."""
+    try:
+        return minio_client.stat_object("db_export", "demo_sessions.csv.gz")
+    except S3Error as err:
+        if err.code == "NoSuchKey":
+            return None
+        else:
+            raise
 
 
 def stat_demo_blob(minio_client: Minio, session_id: str) -> BlobStat | None:

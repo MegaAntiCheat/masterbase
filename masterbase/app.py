@@ -11,6 +11,7 @@ from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect
+from minio import S3Error
 from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
@@ -36,6 +37,7 @@ from masterbase.lib import (
     check_steam_id_is_beta_tester,
     close_session_helper,
     demo_blob_name,
+    export_database,
     generate_api_key,
     generate_uuid4_int,
     late_bytes_helper,
@@ -45,7 +47,10 @@ from masterbase.lib import (
     set_open_false,
     set_open_true,
     start_session_helper,
+    stat_db_export,
+    stat_demo_blob,
     steam_id_from_api_key,
+    time_until_next_export,
     update_api_key,
 )
 from masterbase.models import LateBytesBody, ReportBody
@@ -154,7 +159,7 @@ def list_demos(
 
 
 @get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard])
-async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
+def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
     """Return the demo."""
     minio_client = request.app.state.minio_client
     url = minio_client.presigned_get_object("demos", demo_blob_name(session_id))
@@ -163,6 +168,22 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
         status_code=303,
         headers={"Content-Type": "application/octet-stream"},
     )
+
+
+@get("/db_export", guards=[valid_key_guard, analyst_guard])
+def db_export(request: Request, api_key: str) -> Redirect:
+    """Allow the client to download a DB export if it exists; otherwise, 503."""
+    minio_client = request.app.state.minio_client
+    if stat_db_export(minio_client) is not None:
+        url = minio_client.presigned_get_object("demos", demo_blob_name(session_id))
+        return Redirect(
+            path=url,
+            status_code=303,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+    else:
+        seconds = time_until_next_export().total_seconds()
+        raise HTTPException(status_code=503, detail=f"No DB export found. Check back in {seconds}s.")
 
 
 @post("/report", guards=[valid_key_guard])
