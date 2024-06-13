@@ -49,7 +49,7 @@ def make_db_uri(is_async: bool = False) -> str:
 
 def export_database():
     """Run the database export script."""
-    return sp.run(["/usr/local/bin/db_export.sh"])
+    return sp.run(["/usr/local/bin/export_db.sh"])
 
 
 def time_until_next_export(grace_period: timedelta = timedelta(minutes=30)):
@@ -497,10 +497,10 @@ def demo_sink_path(session_id: str) -> str:
     return os.path.join(DEMOS_PATH, demo_blob_name(session_id))
 
 
-def stat_db_export(minio_client: Minio) -> BlobStat | None:
-    """Return information on the status of the database export if it exists, else None."""
+def stat_db_export(minio_client: Minio, table) -> BlobStat | None:
+    """Return information on the status of the given table's export if it exists, else None."""
     try:
-        return minio_client.stat_object("db_export", "demo_sessions.csv.gz")
+        return minio_client.stat_object("db_export", f"{table}.csv.gz")
     except S3Error as err:
         if err.code == "NoSuchKey":
             return None
