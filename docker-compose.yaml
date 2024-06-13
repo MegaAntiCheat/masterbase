@@ -1,14 +1,11 @@
 version: '3.8'
 
 services:
-  s3:
-    # networks:
-    #   masterbase-network-dev:
-    #     ipv4_address: 172.20.1.10
+  minio:
     build:
       context: .
-      dockerfile: ./services/s3/Dockerfile
-    container_name: s3
+      dockerfile: ./services/minio/Dockerfile
+    container_name: minio
     ports:
       - "9000:9000"
       - "9001:9001"
@@ -16,7 +13,7 @@ services:
       MINIO_ROOT_USER: MEGASCATTERBOMB
       MINIO_ROOT_PASSWORD: masterbase
     volumes:
-      - s3_data:/blobs/
+      - demo_data:/blobs/
 
   db:
     build:
@@ -29,9 +26,6 @@ services:
       POSTGRES_DB: demos
     ports:
       - "8050:5432"
-    # networks:
-    #   masterbase-network-dev:
-    #     ipv4_address: 172.20.1.20
     volumes:
       - db_data:/var/lib/postgresql/data/
 
@@ -50,26 +44,18 @@ services:
       POSTGRES_PASSWORD: masterbase
       POSTGRES_HOST: db
       POSTGRES_PORT: 5432
-      MINIO_HOST: s3
+      MINIO_HOST: localhost
       MINIO_PORT: 9000
       MINIO_ACCESS_KEY: MEGASCATTERBOMB
       MINIO_SECRET_KEY: masterbase
     ports:
       - "8000:8000"
-    # networks:
-    #   masterbase-network-dev:
-    #     ipv4_address: 172.20.1.30
 
 
 networks:
   masterbase_default:
     driver: bridge
- # networks:
- #   masterbase-network-dev:
- #     driver: bridge
- #     ipam:
- #       config:
- #         - subnet: 172.20.0.0/16
+
 volumes:
-  s3_data:
+  demo_data:
   db_data:
