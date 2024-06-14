@@ -7,6 +7,8 @@ import os
 import secrets
 import socket
 from datetime import datetime, timezone
+from queue import Queue
+from threading import Thread
 from typing import IO, Any, BinaryIO, Generator, cast
 from uuid import uuid4
 
@@ -56,25 +58,31 @@ def make_minio_client(is_secure: bool = False) -> Minio:
 
 def db_export_chunks(engine: Engine, table: str) -> Generator[bytes, None, None]:
     """Export the given table as an iterable of csv chunks."""
+    queue = Queue()
+    sentinel = object()
 
-    def _receiver():
-        data = yield
-        yield data
+    def worker():
+        class Shunt:
+            def write(self, data):
+                queue.put(data)
 
-    channel = _receiver()
+        try:
+            conn = engine.raw_connection()
+            cursor = conn.cursor()
+            cursor.copy_expert(f"COPY '{table}' TO STDOUT WITH CSV HEADER", Shunt())
+            conn.commit()
+            queue.put(sentinel)
+        except Exception as err:
+            queue.put(err)
+        finally:
+            conn.close()
 
-    class Sender:
-        def write(self, data):
-            channel.send(data)
-
-    try:
-        conn = engine.raw_connection()
-        cursor = conn.cursor()
-        cursor.copy_expert(f"COPY '{table}' TO STDOUT WITH CSV HEADER", Sender())
-        conn.commit()
-        yield from channel
-    finally:
-        conn.close()
+    Thread(target=worker).start()
+    for x in iter(queue.get, sentinel):
+        if not isinstance(x, Exception):
+            yield x
+        else:
+            raise x
 
 
 def db_export_cached(
