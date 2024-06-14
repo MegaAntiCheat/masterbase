@@ -58,7 +58,7 @@ def make_minio_client(is_secure: bool = False) -> Minio:
 
 def db_export_chunks(engine: Engine, table: str) -> Generator[bytes, None, None]:
     """Export the given table as an iterable of csv chunks."""
-    queue = Queue()
+    queue: Queue = Queue()
     sentinel = object()
 
     def worker():
