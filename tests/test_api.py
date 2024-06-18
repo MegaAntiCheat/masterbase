@@ -136,7 +136,7 @@ def test_db_exports(test_client: TestClient[Litestar], api_key: str) -> None:
     for i in range(10):
         reason = "cheater" if i % 2 == 0 else "bot"
         target_steam_id = f"{i:020d}"
-        record = {"session_id": session_id, "target_steam_id": target_steam_id, "reason": reason}
+        record = {"session_id": str(session_id), "target_steam_id": target_steam_id, "reason": reason}
         add_report(test_client.app.state.engine, **record)
         expected.append((session_id, target_steam_id, reason))
 
@@ -150,4 +150,4 @@ def test_db_exports(test_client: TestClient[Litestar], api_key: str) -> None:
             for record in sorted(response_records, key=lambda record: record["created_at"])
         )
     )
-    assert tuple(expected) == returned
+    assert tuple(expected) == tuple(returned)
