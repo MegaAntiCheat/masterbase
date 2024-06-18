@@ -58,11 +58,13 @@ def make_minio_client(is_secure: bool = False) -> Minio:
 
 def db_export_chunks(engine: Engine, table: str) -> Generator[bytes, None, None]:
     """Export the given table as an iterable of csv chunks."""
-    queue: Queue = Queue(maxsize=1)
 
     class Shunt:
         def write(self, data):
             queue.put(data)
+
+    shunt = Shunt()
+    queue: Queue = Queue()
 
     shunt = Shunt()
 
@@ -80,30 +82,6 @@ def db_export_chunks(engine: Engine, table: str) -> Generator[bytes, None, None]
         if isinstance(x, Exception):
             raise x
         yield x
-
-
-def db_export_cached(
-    engine: Engine,
-    table: str,
-    cache_max_age: int,
-    cache_name: str | None = None,
-) -> Generator[bytes, None, None]:
-    """Export an arbitrary table, with a filesystem cache at cache_name."""
-    cache_name = cache_name or f"/tmp/{table}.csv"
-    try:
-        cache_age = datetime.now() - datetime.fromtimestamp(os.stat(cache_name).st_mtime)
-        cache_hit = cache_age.total_seconds() <= cache_max_age
-    except FileNotFoundError:
-        cache_hit = False
-
-    if cache_hit:
-        with open(cache_name, "rb") as lines:
-            yield from lines
-    else:
-        with open(cache_name, "wb+") as cache:
-            for chunk in db_export_chunks(engine, table):
-                cache.write(chunk)
-                yield chunk
 
 
 class ConcatStream:

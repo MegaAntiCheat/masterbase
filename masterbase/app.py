@@ -35,7 +35,7 @@ from masterbase.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     close_session_helper,
-    db_export_cached,
+    db_export_chunks,
     demo_blob_name,
     generate_api_key,
     generate_uuid4_int,
@@ -167,14 +167,12 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
 
 
 @get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def db_export(request: Request, api_key: str, table: ExportTable, max_age: int = 300) -> Stream:
-    """Return a database export of the requested `table` from within the last `max_age` seconds."""
-    if max_age < 300:
-        raise PermissionDeniedException(detail="`max_age` must be at least 300", status_code=403)
+def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
+    """Return a database export of the requested `table`."""
     engine = request.app.state.engine
     filename = f"demo_sessions-{datetime.now()}.csv"
     return Stream(
-        lambda: db_export_cached(engine, table.value, max_age),
+        lambda: db_export_chunks(engine, table.value),
         headers={
             "Content-Type": "text/csv",
             "Content-Disposition": f"attachment; filename={filename}",
