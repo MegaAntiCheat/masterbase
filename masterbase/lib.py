@@ -648,19 +648,21 @@ def add_loser(engine: Engine, steam_id: str) -> None:
 def add_report(engine: Engine, session_id: str, target_steam_id: str, reason: str) -> None:
     """Submit a hackusation to the database."""
     # TODO: Eventually we need to enforce more rigorous checks
-    with engine.connect() as conn:
+    with engine.connect() as txn:
         created_at = datetime.now().astimezone(timezone.utc).isoformat()
-        conn.execute(
+        txn.execute(
             sa.text(
                 """INSERT INTO reports (
                     session_id, target_steam_id, created_at, reason
                 ) VALUES (
                     :session_id, :target_steam_id, :created_at, :reason);
+                ON CONFLICT (session_id, target_steam_id)
+                DO UPDATE SET reason = EXCLUDED.reason, created_at = NOW();
                 """
             ),
             {"target_steam_id": target_steam_id, "session_id": session_id, "created_at": created_at, "reason": reason},
         )
-        conn.commit()
+        txn.commit()
 
 
 def check_is_loser(engine: Engine, steam_id: str) -> bool:
