@@ -167,7 +167,7 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
 
 
 @get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def db_export(request: Request, api_key: str, table: ExportTable, max_age: int | None = 300) -> Stream:
+def db_export(request: Request, api_key: str, table: ExportTable, max_age: int = 300) -> Stream:
     """Return a database export of the requested `table` from within the last `max_age` seconds."""
     if max_age < 300:
         raise PermissionDeniedException(detail="`max_age` must be at least 300", status_code=403)
@@ -381,11 +381,6 @@ def provision_handler(request: Request) -> str:
         """
 
 
-def _reraise_handler(req: Request, err: Exception) -> None:
-    if req.app.opt["DEVELOPMENT"]:
-        raise err
-
-
 app = Litestar(
     on_startup=startup_registers,
     route_handlers=[
@@ -402,7 +397,6 @@ app = Litestar(
         db_export,
     ],
     on_shutdown=shutdown_registers,
-    exception_handlers={HTTPException: _reraise_handler},
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
 

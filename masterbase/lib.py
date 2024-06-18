@@ -97,7 +97,7 @@ def db_export_cached(
         cache_hit = False
 
     if cache_hit:
-        with open(cache_name, "r") as lines:
+        with open(cache_name, "rb") as lines:
             yield from lines
     else:
         with open(cache_name, "wb+") as cache:
