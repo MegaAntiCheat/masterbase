@@ -145,7 +145,9 @@ def test_db_exports(test_client: TestClient[Litestar], api_key: str) -> None:
     response_records = csv.DictReader(io.TextIOWrapper(io.BytesIO(response.content)))
     assert set(response_records.fieldnames).issuperset({"session_id", "target_steam_id", "reason"})
     returned = sorted(
-        ((record["session_id"], record["target_steam_id"], record["reason"]) for record in response_records),
-        key=lambda record: record["created_at"],
+        (
+            (record["session_id"], record["target_steam_id"], record["reason"])
+            for record in sorted(response_records, key=lambda record: record["created_at"])
+        )
     )
     assert tuple(expected) == returned
