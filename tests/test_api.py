@@ -44,9 +44,9 @@ def test_client(steam_id: str, api_key: str) -> Iterator[TestClient[Litestar]]:
         yield client
 
         with app.state.engine.connect() as conn:
-            sql = "DELETE FROM demo_sessions;"
-            conn.execute(sa.text(sql))
             sql = "TRUNCATE TABLE reports CASCADE;"
+            conn.execute(sa.text(sql))
+            sql = "TRUNCATE TABLE demo_sessions CASCADE;"
             conn.execute(sa.text(sql))
             sql = "DELETE FROM api_keys WHERE api_key = :api_key;"
             conn.execute(sa.text(sql), {"api_key": api_key})
