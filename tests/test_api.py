@@ -135,11 +135,17 @@ def test_db_exports(test_client: TestClient[Litestar], api_key: str) -> None:
     expected = []
     for i in range(10):
         reason = "cheater" if i % 2 == 0 else "bot"
-        record = {"session_id": session_id, "target_steam_id": f"{i:020d}", "reason": reason}
+        target_steam_id = f"{i:020d}"
+        record = {"session_id": session_id, "target_steam_id": target_steam_id, "reason": reason}
         add_report(test_client.app.state.engine, **record)
-        expected.append(record)
+        expected.append((session_id, target_steam_id, reason))
 
     test_client.get("/close_session", params={"api_key": api_key})
     response = test_client.get("/db_export", params={"api_key": api_key, "table": "reports"})
-    returned = csv.DictReader(io.TextIOWrapper(io.BytesIO(response.content)))
-    assert tuple(expected) == tuple(returned)
+    response_records = csv.DictReader(io.TextIOWrapper(io.BytesIO(response.content)))
+    assert set(response_records.fieldnames).issuperset({"session_id", "target_steam_id", "reason"})
+    returned = sorted(
+        ((record["session_id"], record["target_steam_id"], record["reason"]) for record in response_records),
+        key=lambda record: record["created_at"],
+    )
+    assert tuple(expected) == returned
