@@ -143,7 +143,9 @@ def test_db_exports(test_client: TestClient[Litestar], api_key: str) -> None:
     test_client.get("/close_session", params={"api_key": api_key})
     response = test_client.get("/db_export", params={"api_key": api_key, "table": "reports"})
     response_records = csv.DictReader(io.TextIOWrapper(io.BytesIO(response.content)))
-    assert set(response_records.fieldnames).issuperset({"session_id", "target_steam_id", "reason"})
+    assert response_records.fieldnames is not None and set(response_records.fieldnames).issuperset(
+        {"session_id", "target_steam_id", "reason"}
+    )
     returned = sorted(
         (
             (int(record["session_id"]), record["target_steam_id"], record["reason"])
