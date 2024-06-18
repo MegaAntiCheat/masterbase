@@ -381,7 +381,7 @@ def provision_handler(request: Request) -> str:
         """
 
 
-def reraise_handler(req: Request, err: Exception) -> None:
+def _reraise_handler(req: Request, err: Exception) -> None:
     if req.app.opt["DEVELOPMENT"]:
         raise err
 
@@ -402,7 +402,7 @@ app = Litestar(
         db_export,
     ],
     on_shutdown=shutdown_registers,
-    exception_handlers={HTTPException: reraise_handler},
+    exception_handlers={HTTPException: _reraise_handler},
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
 
