@@ -49,7 +49,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
-from masterbase.models import DBExportBody, LateBytesBody, ReportBody
+from masterbase.models import ExportTable, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -167,12 +167,14 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
 
 
 @get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def db_export(request: Request, api_key: str, data: DBExportBody) -> Stream:
+def db_export(request: Request, api_key: str, table: ExportTable, max_age: int | None = 300) -> Stream:
     """Return a database export of the requested `table` from within the last `max_age` seconds."""
+    if max_age < 300:
+        raise PermissionDeniedException(detail="`max_age` must be at least 300", status_code=403)
     engine = request.app.state.engine
     filename = f"demo_sessions-{datetime.now()}.csv"
     return Stream(
-        db_export_cached(engine, data.table, data.max_age),
+        lambda: db_export_cached(engine, table.value, max_age),
         headers={
             "Content-Type": "text/csv",
             "Content-Disposition": f"attachment; filename={filename}",
@@ -379,6 +381,11 @@ def provision_handler(request: Request) -> str:
         """
 
 
+def reraise_handler(req: Request, err: Exception) -> None:
+    if req.app.opt["DEVELOPMENT"]:
+        raise err
+
+
 app = Litestar(
     on_startup=startup_registers,
     route_handlers=[
@@ -392,8 +399,10 @@ app = Litestar(
         list_demos,
         analyst_list_demos,
         report_player,
+        db_export,
     ],
     on_shutdown=shutdown_registers,
+    exception_handlers={HTTPException: reraise_handler},
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
 

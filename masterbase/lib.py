@@ -58,31 +58,28 @@ def make_minio_client(is_secure: bool = False) -> Minio:
 
 def db_export_chunks(engine: Engine, table: str) -> Generator[bytes, None, None]:
     """Export the given table as an iterable of csv chunks."""
-    queue: Queue = Queue()
-    sentinel = object()
+    queue: Queue = Queue(maxsize=1)
+
+    class Shunt:
+        def write(self, data):
+            queue.put(data)
+
+    shunt = Shunt()
 
     def worker():
-        class Shunt:
-            def write(self, data):
-                queue.put(data)
-
         try:
-            conn = engine.raw_connection()
-            cursor = conn.cursor()
-            cursor.copy_expert(f"COPY '{table}' TO STDOUT WITH CSV HEADER", Shunt())
-            conn.commit()
-            queue.put(sentinel)
+            with engine.connect() as txn:
+                cursor = txn.connection.dbapi_connection.cursor()
+                cursor.copy_expert(f"COPY {table} TO STDOUT DELIMITER ',' CSV HEADER", shunt)
+                queue.put(b"")
         except Exception as err:
             queue.put(err)
-        finally:
-            conn.close()
 
     Thread(target=worker).start()
-    for x in iter(queue.get, sentinel):
-        if not isinstance(x, Exception):
-            yield x
-        else:
+    for x in iter(queue.get, b""):
+        if isinstance(x, Exception):
             raise x
+        yield x
 
 
 def db_export_cached(
@@ -91,18 +88,17 @@ def db_export_cached(
     cache_max_age: int,
     cache_name: str | None = None,
 ) -> Generator[bytes, None, None]:
-    """Export an arbitrary table, with a filesystem cache at cache_path."""
+    """Export an arbitrary table, with a filesystem cache at cache_name."""
     cache_name = cache_name or f"/tmp/{table}.csv"
     try:
-        unix_time = (datetime.now() - datetime(1970, 1, 1)).total_seconds()
-        cache_age = unix_time - os.stat(cache_name).st_mtime
-        cache_hit = cache_age <= cache_max_age
+        cache_age = datetime.now() - datetime.fromtimestamp(os.stat(cache_name).st_mtime)
+        cache_hit = cache_age.total_seconds() <= cache_max_age
     except FileNotFoundError:
         cache_hit = False
 
     if cache_hit:
-        with open(cache_name, "rb") as istrm:
-            yield from iter(lambda: istrm.read(5 << 20), b"")
+        with open(cache_name, "r") as lines:
+            yield from lines
     else:
         with open(cache_name, "wb+") as cache:
             for chunk in db_export_chunks(engine, table):

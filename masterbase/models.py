@@ -27,13 +27,6 @@ class ExportTable(str, Enum):
     REPORTS = "reports"
 
 
-class DBExportBody(BaseModel):
-    """Request body for a database export."""
-
-    table: ExportTable
-    max_age: int = Field(ge=300)
-
-
 class LateBytesBody(BaseModel):
     """Report model for late_bytes post request body."""
 
