@@ -10,7 +10,7 @@ import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
-from litestar.response import Redirect
+from litestar.response import Redirect, Stream
 from sqlalchemy.exc import IntegrityError
 
 from masterbase.anomaly import DetectionState
@@ -35,6 +35,7 @@ from masterbase.lib import (
     check_steam_id_has_api_key,
     check_steam_id_is_beta_tester,
     close_session_helper,
+    db_export_chunks,
     demo_blob_name,
     generate_api_key,
     generate_uuid4_int,
@@ -48,7 +49,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
-from masterbase.models import LateBytesBody, ReportBody
+from masterbase.models import ExportTable, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -162,6 +163,20 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
         path=url,
         status_code=303,
         headers={"Content-Type": "application/octet-stream"},
+    )
+
+
+@get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
+    """Return a database export of the requested `table`."""
+    engine = request.app.state.engine
+    filename = f"demo_sessions-{datetime.now()}.csv"
+    return Stream(
+        lambda: db_export_chunks(engine, table.value),
+        headers={
+            "Content-Type": "text/csv",
+            "Content-Disposition": f"attachment; filename={filename}",
+        },
     )
 
 
@@ -377,6 +392,7 @@ app = Litestar(
         list_demos,
         analyst_list_demos,
         report_player,
+        db_export,
     ],
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},

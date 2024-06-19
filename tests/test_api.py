@@ -1,5 +1,7 @@
 """Integration tests."""
 
+import csv
+import io
 import time
 from typing import Iterator
 
@@ -11,7 +13,7 @@ from litestar.status_codes import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBID
 from litestar.testing import TestClient
 
 from masterbase.app import app
-from masterbase.lib import LATE_BYTES_END, LATE_BYTES_START
+from masterbase.lib import LATE_BYTES_END, LATE_BYTES_START, add_report
 from masterbase.models import ReportReason
 
 pytestmark = pytest.mark.integration
@@ -42,7 +44,9 @@ def test_client(steam_id: str, api_key: str) -> Iterator[TestClient[Litestar]]:
         yield client
 
         with app.state.engine.connect() as conn:
-            sql = "DELETE FROM demo_sessions;"
+            sql = "TRUNCATE TABLE reports CASCADE;"
+            conn.execute(sa.text(sql))
+            sql = "TRUNCATE TABLE demo_sessions CASCADE;"
             conn.execute(sa.text(sql))
             sql = "DELETE FROM api_keys WHERE api_key = :api_key;"
             conn.execute(sa.text(sql), {"api_key": api_key})
@@ -118,3 +122,34 @@ def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None
         demo_in = f.read()
         demo_in = demo_in[:LATE_BYTES_START] + bytes.fromhex(late_bytes_hex) + demo_in[LATE_BYTES_END:]
         assert demo_in == demo_out
+
+
+def test_db_exports(test_client: TestClient[Litestar], api_key: str) -> None:
+    """Test on-demand exports from the database."""
+    session_id_response = test_client.get(
+        "/session_id",
+        params={"api_key": api_key, "fake_ip": "169.254.215.11%3A58480", "map": "some_map", "demo_name": "demo.dem"},
+    )
+    session_id = session_id_response.json()["session_id"]
+    # Insert mock reports
+    expected = []
+    for i in range(10):
+        reason = "cheater" if i % 2 == 0 else "bot"
+        target_steam_id = f"{i:020d}"
+        record = {"session_id": session_id, "target_steam_id": target_steam_id, "reason": reason}
+        add_report(test_client.app.state.engine, **record)
+        expected.append((session_id, target_steam_id, reason))
+
+    test_client.get("/close_session", params={"api_key": api_key})
+    response = test_client.get("/db_export", params={"api_key": api_key, "table": "reports"})
+    response_records = csv.DictReader(io.TextIOWrapper(io.BytesIO(response.content)))
+    assert response_records.fieldnames is not None and set(response_records.fieldnames).issuperset(
+        {"session_id", "target_steam_id", "reason"}
+    )
+    returned = sorted(
+        (
+            (int(record["session_id"]), record["target_steam_id"], record["reason"])
+            for record in sorted(response_records, key=lambda record: record["created_at"])
+        )
+    )
+    assert tuple(expected) == tuple(returned)

@@ -20,6 +20,13 @@ class ReportBody(BaseModel):
     reason: ReportReason
 
 
+class ExportTable(str, Enum):
+    """Tables to be allowed in database exports."""
+
+    DEMOS = "demo_sessions"
+    REPORTS = "reports"
+
+
 class LateBytesBody(BaseModel):
     """Report model for late_bytes post request body."""
 
