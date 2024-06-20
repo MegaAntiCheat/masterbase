@@ -8,7 +8,8 @@ from typing import Iterator
 import pytest
 import requests
 import sqlalchemy as sa
-from litestar import Litestar, Response
+from httpx import Response
+from litestar import Litestar
 from litestar.status_codes import HTTP_200_OK, HTTP_201_CREATED, HTTP_403_FORBIDDEN
 from litestar.testing import TestClient
 

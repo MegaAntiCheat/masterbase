@@ -67,7 +67,7 @@ def session_id(
     demo_name: str,
     fake_ip: str,
     map: str,
-) -> dict[str, int]:
+) -> dict[str, str]:
     """Return a session ID, as well as persist to database.
 
     This is to help us know what is happening downstream:
