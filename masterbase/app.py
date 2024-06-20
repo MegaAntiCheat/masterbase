@@ -67,7 +67,7 @@ def session_id(
     demo_name: str,
     fake_ip: str,
     map: str,
-) -> dict[str, int]:
+) -> dict[str, str]:
     """Return a session ID, as well as persist to database.
 
     This is to help us know what is happening downstream:
@@ -88,7 +88,7 @@ def session_id(
         fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
     start_session_helper(engine, steam_id, str(_session_id), demo_name, fake_ip, map)
 
-    return {"session_id": _session_id}
+    return {"session_id": str(_session_id)}
 
 
 @get("/close_session", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
@@ -191,14 +191,8 @@ async def report_player(request: Request, api_key: str, data: ReportBody) -> dic
     try:
         add_report(engine, data.session_id, str(data.target_steam_id), data.reason.value)
         return {"report_added": True}
-    except IntegrityError as e:
-        # case target_steam_id is already reported in that session
-        traceback = str(e.orig.with_traceback(e.__traceback__))  # type: ignore
-        if "already exists" in traceback:
-            detail = f"Target ({data.target_steam_id}) is already reported in that session!"
-        else:
-            detail = f"Session ID ({data.session_id}) is unknown!"
-        raise HTTPException(detail=detail, status_code=409)
+    except IntegrityError:
+        raise HTTPException(detail=f"Unknown session ID {data.session_id}", status_code=402)
 
 
 class DemoHandler(WebsocketListener):
