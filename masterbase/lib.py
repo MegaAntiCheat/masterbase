@@ -7,7 +7,9 @@ import os
 import secrets
 import socket
 from datetime import datetime, timezone
-from typing import IO, Any, BinaryIO, cast
+from queue import Queue
+from threading import Thread
+from typing import IO, Any, BinaryIO, Generator, cast
 from uuid import uuid4
 
 import sqlalchemy as sa
@@ -52,6 +54,34 @@ def make_minio_client(is_secure: bool = False) -> Minio:
         os.getenv, ("MINIO_HOST", "MINIO_PORT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY")
     )
     return Minio(f"{host}:{port}", access_key=access_key, secret_key=secret_key, secure=is_secure)
+
+
+def db_export_chunks(engine: Engine, table: str) -> Generator[bytes, None, None]:
+    """Export the given table as an iterable of csv chunks."""
+
+    class Shunt:
+        def write(self, data):
+            queue.put(data)
+
+    shunt = Shunt()
+    queue: Queue = Queue()
+
+    shunt = Shunt()
+
+    def worker():
+        try:
+            with engine.connect() as txn:
+                cursor = txn.connection.dbapi_connection.cursor()
+                cursor.copy_expert(f"COPY {table} TO STDOUT DELIMITER ',' CSV HEADER", shunt)
+                queue.put(b"")
+        except Exception as err:
+            queue.put(err)
+
+    Thread(target=worker).start()
+    for x in iter(queue.get, b""):
+        if isinstance(x, Exception):
+            raise x
+        yield x
 
 
 class ConcatStream:
@@ -655,7 +685,7 @@ def add_report(engine: Engine, session_id: str, target_steam_id: str, reason: st
                 """INSERT INTO reports (
                     session_id, target_steam_id, created_at, reason
                 ) VALUES (
-                    :session_id, :target_steam_id, :created_at, :reason);
+                    :session_id, :target_steam_id, :created_at, :reason)
                 ON CONFLICT (session_id, target_steam_id)
                 DO UPDATE SET reason = EXCLUDED.reason, created_at = NOW();
                 """
