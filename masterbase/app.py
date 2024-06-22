@@ -159,7 +159,7 @@ def list_demos(
 async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
     """Return the demo."""
     minio_client = request.app.state.minio_client
-    url = minio_client.presigned_get_object("demos", demo_blob_name(session_id))
+    url = minio_client.presigned_get_object("demoblobs", demo_blob_name(session_id))
     return Redirect(
         path=url,
         status_code=303,

@@ -433,7 +433,7 @@ def _close_session_with_demo(
             head = io.BytesIO(sink.read(LATE_BYTES_START))
             sink.seek(LATE_BYTES_END, os.SEEK_SET)
             minio_client.put_object(
-                "demos",
+                "demoblobs",
                 demo_blob_name(session_id),
                 data=cast(BinaryIO, ConcatStream(head, late, sink)),
                 length=size,
