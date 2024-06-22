@@ -107,7 +107,9 @@ def _send_demo_file(test_client: TestClient[Litestar], api_key: str, session_id:
 def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None:
     """Test streaming a demo to the DB."""
     session_id = _open_mock_session(test_client, api_key).json()["session_id"]
-    _send_demo_file(test_client, api_key, session_id)
+    assert isinstance(session_id, int)
+
+    _send_demo_file(test_client, api_key, str(session_id))
 
     late_bytes_hex = "7031cf44a7af0100cea70100f5e00400"
     late_bytes_response = test_client.post(
@@ -130,7 +132,7 @@ def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None
 
 def test_db_exports(test_client: TestClient[Litestar], api_key: str) -> None:
     """Test on-demand exports from the database."""
-    session_id = _open_mock_session(test_client, api_key).json()["session_id"]
+    session_id = str(_open_mock_session(test_client, api_key).json()["session_id"])
     # Insert mock reports
     expected = []
     for i in range(10):
@@ -157,7 +159,7 @@ def test_db_exports(test_client: TestClient[Litestar], api_key: str) -> None:
 
 def test_upsert_report_reason(test_client: TestClient[Litestar], api_key: str) -> None:
     """Ensure that upserts of reports during the same session work as intended."""
-    session_id = _open_mock_session(test_client, api_key).json()["session_id"]
+    session_id = str(_open_mock_session(test_client, api_key).json()["session_id"])
     engine = test_client.app.state.engine
     target_sid = f"{0:020d}"
     add_report(engine, session_id, target_sid, reason="bot")

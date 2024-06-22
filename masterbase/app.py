@@ -68,7 +68,7 @@ def session_id(
     demo_name: str,
     fake_ip: str,
     map: str,
-) -> dict[str, str]:
+) -> dict[str, int]:
     """Return a session ID, as well as persist to database.
 
     This is to help us know what is happening downstream:
@@ -89,7 +89,7 @@ def session_id(
         fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
     start_session_helper(engine, steam_id, str(_session_id), demo_name, fake_ip, map)
 
-    return {"session_id": str(_session_id)}
+    return {"session_id": _session_id}
 
 
 @get("/close_session", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
