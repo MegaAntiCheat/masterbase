@@ -381,8 +381,7 @@ def provision_handler(request: Request) -> str:
 def plain_text_exception_handler(_: Request, exc: Exception) -> Response:
     """Handle exceptions subclassed from HTTPException."""
     status_code = getattr(exc, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
-    detail = getattr(exc, "detail", "")
-    logger.error(detail)
+    logger.error("Exception occurred!", exc_info=exc)
 
     return Response(
         media_type=MediaType.TEXT,
