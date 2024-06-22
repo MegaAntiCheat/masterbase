@@ -1,0 +1,11 @@
+export DEVELOPMENT=true
+export DEBUG_WAIT_FOR_ATTACH=true
+export STEAM_API_KEY=foo
+export POSTGRES_USER=MEGASCATTERBOMB
+export POSTGRES_PASSWORD=masterbase
+export POSTGRES_HOST=localhost
+export POSTGRES_PORT=8050
+export MINIO_HOST=localhost
+export MINIO_PORT=9000
+export MINIO_ACCESS_KEY=MEGASCATTERBOMB
+export MINIO_SECRET_KEY=masterbase

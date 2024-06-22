@@ -156,15 +156,19 @@ def list_demos(
 
 
 @get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard])
-async def demodata(request: Request, api_key: str, session_id: str) -> Redirect:
+async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
     minio_client = request.app.state.minio_client
-    url = minio_client.presigned_get_object("demos", demo_blob_name(session_id))
-    return Redirect(
-        path=url,
-        status_code=303,
-        headers={"Content-Type": "application/octet-stream"},
-    )
+    blob_name = demo_blob_name(session_id)
+    file = minio_client.get_object("demoblobs", blob_name)
+    stat = minio_client.stat_object("demoblobs", blob_name)
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{blob_name}"',
+        "Content-Length": str(stat.size),
+    }
+
+    return Stream(file.stream(), media_type=MediaType.TEXT, headers=headers)
 
 
 @get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
@@ -377,12 +381,11 @@ def provision_handler(request: Request) -> str:
 def plain_text_exception_handler(_: Request, exc: Exception) -> Response:
     """Handle exceptions subclassed from HTTPException."""
     status_code = getattr(exc, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
-    detail = getattr(exc, "detail", "")
-    logger.error(detail)
+    logger.error("Exception occurred!", exc_info=exc)
 
     return Response(
         media_type=MediaType.TEXT,
-        content="Internal Error Occurred",
+        content="Internal Error Occurred!",
         status_code=status_code,
     )
 
@@ -402,6 +405,7 @@ app = Litestar(
         report_player,
         db_export,
     ],
+    exception_handlers={Exception: plain_text_exception_handler},
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
