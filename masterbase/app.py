@@ -10,7 +10,7 @@ import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
 from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
-from litestar.response import File, Redirect, Response, Stream
+from litestar.response import Redirect, Response, Stream
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from sqlalchemy.exc import IntegrityError
 
@@ -156,7 +156,7 @@ def list_demos(
 
 
 @get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard])
-async def demodata(request: Request, api_key: str, session_id: str) -> File:
+async def demodata(request: Request, api_key: str, session_id: str) -> Response:
     """Return the demo."""
     minio_client = request.app.state.minio_client
     file = minio_client.get_object("demoblobs", demo_blob_name(session_id))
