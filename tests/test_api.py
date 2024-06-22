@@ -109,7 +109,7 @@ def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None
     session_id = _open_mock_session(test_client, api_key).json()["session_id"]
     assert isinstance(session_id, int)
 
-    _send_demo_file(test_client, api_key, session_id)
+    _send_demo_file(test_client, api_key, str(session_id))
 
     late_bytes_hex = "7031cf44a7af0100cea70100f5e00400"
     late_bytes_response = test_client.post(
