@@ -399,6 +399,7 @@ app = Litestar(
         report_player,
         db_export,
     ],
+    exception_handlers={HTTPException: plain_text_exception_handler},
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
