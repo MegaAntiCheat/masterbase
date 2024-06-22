@@ -386,7 +386,7 @@ def plain_text_exception_handler(_: Request, exc: Exception) -> Response:
 
     return Response(
         media_type=MediaType.TEXT,
-        content="Internal Error Occurred",
+        content="Internal Error Occurred!",
         status_code=status_code,
     )
 
@@ -406,7 +406,7 @@ app = Litestar(
         report_player,
         db_export,
     ],
-    exception_handlers={HTTPException: plain_text_exception_handler},
+    exception_handlers={Exception: plain_text_exception_handler},
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
