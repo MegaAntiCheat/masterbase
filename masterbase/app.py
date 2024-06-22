@@ -156,12 +156,19 @@ def list_demos(
 
 
 @get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard])
-async def demodata(request: Request, api_key: str, session_id: str) -> Response:
+async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
     minio_client = request.app.state.minio_client
-    file = minio_client.get_object("demoblobs", demo_blob_name(session_id))
+    blob_name = demo_blob_name(session_id)
+    file = minio_client.get_object("demoblobs", blob_name)
+    stat = minio_client.stat_object("demoblobs", blob_name)
 
-    return Response(content=file.read(), media_type=MediaType.TEXT)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{blob_name}"',
+        "Content-Length": str(stat.size),
+    }
+
+    return Stream(file.stream(), media_type=MediaType.TEXT, headers=headers)
 
 
 @get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
