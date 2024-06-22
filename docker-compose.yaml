@@ -8,7 +8,6 @@ services:
     container_name: minio
     ports:
       - "9000:9000"
-      - "9001:9001"
     environment:
       MINIO_ROOT_USER: MEGASCATTERBOMB
       MINIO_ROOT_PASSWORD: masterbase
@@ -50,6 +49,8 @@ services:
       MINIO_SECRET_KEY: masterbase
     ports:
       - "8000:8000"
+    depends_on:
+      - minio
 
 
 networks:
