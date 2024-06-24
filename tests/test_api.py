@@ -104,7 +104,7 @@ def _send_demo_file(test_client: TestClient[Litestar], api_key: str, session_id:
 
 
 def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None:
-    """Test streaming a demo to the DB."""
+    """Test streaming a demo to the database with a header overwrite."""
     session_id = _open_mock_session(test_client, api_key).json()["session_id"]
     assert isinstance(session_id, int)
 
@@ -125,6 +125,24 @@ def test_demo_streaming(test_client: TestClient[Litestar], api_key: str) -> None
     with open("tests/data/test_demo.dem", "rb") as f:
         demo_in = f.read()
         demo_in = demo_in[:LATE_BYTES_START] + bytes.fromhex(late_bytes_hex) + demo_in[LATE_BYTES_END:]
+        assert demo_in == demo_out
+
+
+def test_demo_streaming_no_late(test_client: TestClient[Litestar], api_key: str) -> None:
+    """Test streaming a demo to the database without a header overwrite."""
+    session_id = _open_mock_session(test_client, api_key).json()["session_id"]
+    assert isinstance(session_id, int)
+
+    _send_demo_file(test_client, api_key, str(session_id))
+
+    close_session_response = test_client.get("/close_session", params={"api_key": api_key})
+    assert close_session_response.status_code == HTTP_200_OK
+
+    with test_client.stream("GET", "/demodata", params={"api_key": api_key, "session_id": session_id}) as demo_stream:
+        demo_out = demo_stream.read()
+
+    with open("tests/data/test_demo.dem", "rb") as f:
+        demo_in = f.read()
         assert demo_in == demo_out
 
 
