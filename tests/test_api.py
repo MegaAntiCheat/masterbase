@@ -6,7 +6,6 @@ import time
 from typing import Iterator
 
 import pytest
-import requests
 import sqlalchemy as sa
 from httpx import Response
 from litestar import Litestar

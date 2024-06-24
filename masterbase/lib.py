@@ -30,9 +30,9 @@ LATE_BYTES_START = 0x420
 LATE_BYTES_END = 0x430
 
 
-def resolve_hostname(hosthame: str) -> str:
+def resolve_hostname(hostname: str) -> str:
     """Resolve a hostname to an IP."""
-    return socket.gethostbyname(hosthame)
+    return socket.gethostbyname(hostname)
 
 
 def make_db_uri(is_async: bool = False) -> str:

@@ -86,7 +86,7 @@ def session_id(
     fake_ip = unquote(fake_ip)
     if not fake_ip.startswith("169"):
         to_resolve, port = fake_ip.split(":")
-        fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
+        fake_ip = f"{resolve_hostname(to_resolve)}:{port}"
     start_session_helper(engine, steam_id, str(_session_id), demo_name, fake_ip, map)
 
     return {"session_id": _session_id}
@@ -378,14 +378,18 @@ def provision_handler(request: Request) -> str:
         """
 
 
-def plain_text_exception_handler(_: Request, exc: Exception) -> Response:
+def plain_text_exception_handler(_: Request, exception: Exception) -> Response:
     """Handle exceptions subclassed from HTTPException."""
-    status_code = getattr(exc, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
-    logger.error("Exception occurred!", exc_info=exc)
+    status_code = getattr(exception, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
+    if isinstance(exception, HTTPException):
+        content = exception.detail
+    else:
+        content = "Internal Error Occurred!"
+        logger.error("Exception occurred!", exc_info=exception)
 
     return Response(
         media_type=MediaType.TEXT,
-        content="Internal Error Occurred!",
+        content=content,
         status_code=status_code,
     )
 
