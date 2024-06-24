@@ -99,7 +99,7 @@ async def valid_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -
             raise NotAuthorizedException(f"Cannot accept data from a non-existent gameserver! ({fake_ip})")
     else:
         to_resolve, port = fake_ip.split(":")
-        fake_ip = f"{resolve_hostname(fake_ip)}:{port}"
+        fake_ip = f"{resolve_hostname(to_resolve)}:{port}"
         query = Query(api_key, {"gameaddr": fake_ip})
         servers = query.query()
         if not servers:
