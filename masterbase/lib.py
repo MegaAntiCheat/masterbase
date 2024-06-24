@@ -428,17 +428,20 @@ def _close_session_with_demo(
                 "blob_name": demo_blob_name(session_id),
             },
         ).scalar_one()
-        with open(sink_path, "rb") as sink:
-            late = io.BytesIO(late_bytes)
-            head = io.BytesIO(sink.read(LATE_BYTES_START))
-            sink.seek(LATE_BYTES_END, os.SEEK_SET)
-            minio_client.put_object(
-                "demoblobs",
-                demo_blob_name(session_id),
-                data=cast(BinaryIO, ConcatStream(head, late, sink)),
-                length=size,
-                metadata={"has_late_bytes": str(bool(late_bytes))},
-            )
+        if late_bytes is not None:
+            with open(sink_path, "rb") as sink:
+                late = io.BytesIO(late_bytes)
+                head = io.BytesIO(sink.read(LATE_BYTES_START))
+                sink.seek(LATE_BYTES_END, os.SEEK_SET)
+                minio_client.put_object(
+                    "demoblobs",
+                    demo_blob_name(session_id),
+                    data=cast(BinaryIO, ConcatStream(head, late, sink)),
+                    length=size,
+                    metadata={"has_late_bytes": str(bool(late_bytes))},
+                )
+        else:
+            minio_client.fput_object("demoblobs", demo_blob_name(session_id), file_path=sink_path)
         conn.commit()
 
 
