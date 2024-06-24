@@ -175,7 +175,7 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
 def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
     """Return a database export of the requested `table`."""
     engine = request.app.state.engine
-    filename = f"demo_sessions-{datetime.now()}.csv"
+    filename = f"{table.value}-{datetime.now()}.csv"
     return Stream(
         lambda: db_export_chunks(engine, table.value),
         headers={
