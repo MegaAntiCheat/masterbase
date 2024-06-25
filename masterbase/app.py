@@ -1,5 +1,6 @@
 """Litestar Application for serving and ingesting data."""
 
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -382,7 +383,11 @@ def readable_exception_handler(_: Request, exception: Exception) -> Response:
     """Handle exceptions subclassed from HTTPException."""
     status_code = getattr(exception, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
     if isinstance(exception, ValidationException):
-        return Response(json={"detail": "Validation error!", "errors": exception.extra}, status_code=status_code)
+        return Response(
+            content=json.dumps({"detail": "Validation error in request parameters", "errors": exception.extra}),
+            status_code=status_code,
+            media_type=MediaType.JSON,
+        )
     if isinstance(exception, HTTPException):
         content = exception.detail
     else:

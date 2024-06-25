@@ -177,7 +177,7 @@ def test_db_exports(test_client: TestClient[Litestar], api_key: str) -> None:
     since = returned_full[4]["created_at"]
 
     tzone = timezone(timedelta(hours=int(since[-3:])))
-    stamp = datetime(*map(int, re.findall(r"\d+", since[:-3])), tzone)
+    stamp = datetime.strptime("%Y-%m-%d %H:%M:%S", since[:-3]).astimezone(tzone)
     response = test_client.get(
         "/db_export", params={"api_key": api_key, "table": "reports", "since": stamp.isoformat()}
     )
