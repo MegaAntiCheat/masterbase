@@ -8,7 +8,7 @@ from urllib.parse import unquote, urlencode
 import requests
 import uvicorn
 from litestar import Litestar, MediaType, Request, WebSocket, get, post
-from litestar.exceptions import HTTPException, PermissionDeniedException
+from litestar.exceptions import HTTPException, PermissionDeniedException, ValidationException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Response, Stream
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
@@ -172,12 +172,12 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
 
 
 @get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
+def db_export(request: Request, api_key: str, table: ExportTable, since: datetime | None = None) -> Stream:
     """Return a database export of the requested `table`."""
     engine = request.app.state.engine
     filename = f"{table.value}-{datetime.now()}.csv"
     return Stream(
-        lambda: db_export_chunks(engine, table.value),
+        lambda: db_export_chunks(engine, table.value, since),
         headers={
             "Content-Type": "text/csv",
             "Content-Disposition": f"attachment; filename={filename}",
@@ -378,9 +378,11 @@ def provision_handler(request: Request) -> str:
         """
 
 
-def plain_text_exception_handler(_: Request, exception: Exception) -> Response:
+def readable_exception_handler(_: Request, exception: Exception) -> Response:
     """Handle exceptions subclassed from HTTPException."""
     status_code = getattr(exception, "status_code", HTTP_500_INTERNAL_SERVER_ERROR)
+    if isinstance(exception, ValidationException):
+        return Response(json={"detail": "Validation error!", "errors": exception.extra}, status_code=status_code)
     if isinstance(exception, HTTPException):
         content = exception.detail
     else:
@@ -409,7 +411,7 @@ app = Litestar(
         report_player,
         db_export,
     ],
-    exception_handlers={Exception: plain_text_exception_handler},
+    exception_handlers={Exception: readable_exception_handler},
     on_shutdown=shutdown_registers,
     opt={"DEVELOPMENT": bool(os.getenv("DEVELOPMENT"))},
 )
