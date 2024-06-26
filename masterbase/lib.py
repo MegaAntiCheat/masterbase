@@ -114,7 +114,7 @@ class ConcatStream:
                 data[head : head + len(read)] = read
                 head += len(read)
                 size -= len(read)
-        return bytes(data)
+        return bytes(data[:head])
 
 
 class DemoSessionManager:
