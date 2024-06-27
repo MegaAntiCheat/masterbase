@@ -120,11 +120,11 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
     current_time = datetime.now().astimezone(timezone.utc)
     steam_id = steam_id_from_api_key(engine, api_key)
     converted_late_bytes = bytes.fromhex(data.late_bytes)
-    added = late_bytes_helper(engine, steam_id, converted_late_bytes, current_time)
-    if added:
+    error = late_bytes_helper(engine, steam_id, converted_late_bytes, current_time)
+    if error is None:
         return {"late_bytes": True}
     else:
-        raise HTTPException(detail="late bytes already submitted", status_code=422, extra={"late_bytes": False})
+        raise HTTPException(detail=error, status_code=422, extra={"late_bytes": False})
 
 
 @get("/analyst_list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
