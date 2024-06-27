@@ -17,6 +17,7 @@ from litestar import WebSocket
 from minio import Minio, S3Error
 from minio.datatypes import Object as BlobStat
 from sqlalchemy import Engine
+from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from masterbase.anomaly import DetectionState
@@ -538,42 +539,42 @@ def late_bytes_helper(
     steam_id: str,
     late_bytes: bytes,
     current_time: datetime,
-) -> bool:
+) -> str | None:
     """Add late bytes to the database and blob storage.
 
-    No-ops and returns False if late bytes are found, True if they were absent.
+    No-ops and returns an error message if late bytes are found or there are no active sessions.
     """
     with engine.connect() as conn:
-        session_id, old_late_bytes = conn.execute(
-            sa.text(
-                """SELECT session_id, late_bytes FROM demo_sessions
-                WHERE steam_id = :steam_id
-                AND updated_at = (
-                    SELECT MAX(updated_at) FROM demo_sessions WHERE steam_id = :steam_id
-                );
-                """,
-            ),
-            {"steam_id": steam_id},
-        ).one()
-        if session_id and old_late_bytes:
-            return False
-        else:
-            conn.execute(
+        try:
+            session_id, old_late_bytes = conn.execute(
                 sa.text(
-                    """UPDATE demo_sessions
-                        SET
-                        late_bytes = :late_bytes,
-                        updated_at = :updated_at
-                        WHERE session_id = session_id;"""
+                    """SELECT session_id, late_bytes FROM demo_sessions
+                    WHERE active = True
+                    AND steam_id = :steam_id;
+                    """,
                 ),
-                {
-                    "session_id": session_id,
-                    "late_bytes": late_bytes,
-                    "updated_at": current_time.isoformat(),
-                },
-            )
-            conn.commit()
-            return True
+                {"steam_id": steam_id},
+            ).one()
+        except NoResultFound:
+            return "no active session"
+        if session_id and old_late_bytes:
+            return "already submitted"
+        conn.execute(
+            sa.text(
+                """UPDATE demo_sessions
+                    SET
+                    late_bytes = :late_bytes,
+                    updated_at = :updated_at
+                    WHERE session_id = session_id;"""
+            ),
+            {
+                "session_id": session_id,
+                "late_bytes": late_bytes,
+                "updated_at": current_time.isoformat(),
+            },
+        )
+        conn.commit()
+        return None
 
 
 async def get_demo_size(engine: AsyncEngine, session_id: str) -> str:
