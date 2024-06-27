@@ -90,19 +90,31 @@ class ConcatStream:
     def __init__(self, *streams: IO[bytes]) -> None:
         """Initialize the ConcatStream with multiple streams."""
         self.streams = iter(streams)
-        self.current_stream: IO[bytes] | None = next(self.streams, None)
+        self.current: IO[bytes] | None = next(self.streams, None)
 
     def read(self, size: int = -1) -> bytes:
         """Read from the concatenated streams."""
-        if self.current_stream is None:
+        if self.current is None:
             return b""
 
-        data = self.current_stream.read(size)
-        if data == b"":  # End of current stream
-            self.current_stream = next(self.streams, None)
-            return self.read(size)
+        if size < 0:
+            data = bytearray()
+            data += self.current.read()
+            data += b"".join(s.read() for s in self.streams)
+            self.current = None
+            return data
 
-        return data
+        data = bytearray(size)
+        head = 0
+        while size > 0 and self.current is not None:
+            read = self.current.read(size)
+            if read == b"":
+                self.current = next(self.streams, None)
+            else:
+                data[head : head + len(read)] = read
+                head += len(read)
+                size -= len(read)
+        return bytes(data[:head])
 
 
 class DemoSessionManager:
