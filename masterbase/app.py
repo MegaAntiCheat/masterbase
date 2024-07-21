@@ -34,7 +34,6 @@ from masterbase.lib import (
     check_is_open,
     check_key_exists,
     check_steam_id_has_api_key,
-    check_steam_id_is_beta_tester,
     close_session_helper,
     db_export_chunks,
     demo_blob_name,
@@ -348,11 +347,6 @@ def provision_handler(request: Request) -> str:
         if limited:
             add_loser(app.state.engine, steam_id)
             return "limited"
-
-        is_beta_tester = check_steam_id_is_beta_tester(engine, steam_id)
-
-        if not is_beta_tester:
-            return "<span>You aren't a beta tester! Sorry!</span>"
 
         api_key = check_steam_id_has_api_key(engine, steam_id)
         new_api_key = generate_api_key()
