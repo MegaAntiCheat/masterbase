@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- Demo downloading now fixed
+- Remove requirement to be a beta tester
 
 ## v1.1.1 - 2024-06-22
 
