@@ -639,9 +639,10 @@ def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
 def update_api_key(engine: Engine, steam_id: str, new_api_key: str) -> None:
     """Update an API key."""
     with engine.connect() as conn:
+        updated_at = datetime.now().astimezone(timezone.utc).isoformat()
         conn.execute(
-            sa.text("UPDATE api_keys SET api_key = :new_api_key WHERE steam_id = :steam_id"),
-            {"steam_id": steam_id, "new_api_key": new_api_key},
+            sa.text("UPDATE api_keys SET api_key = :new_api_key, updated_at = :updated_at WHERE steam_id = :steam_id"),
+            {"steam_id": steam_id, "updated_at": updated_at, "new_api_key": new_api_key},
         )
         conn.commit()
 
