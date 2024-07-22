@@ -3,6 +3,7 @@
 import logging
 import os
 from datetime import datetime, timezone
+from hmac import compare_digest
 from urllib.parse import unquote, urlencode
 
 import requests
@@ -352,8 +353,8 @@ def provision_handler(request: Request) -> str:
         new_api_key = generate_api_key()
         invalidated_text = ""
         oid_hash = str(hash(str(request.url)))
-        if api_key is not None:
-            if oid_hash == existing_oid_hash:
+        if api_key is not None and existing_oid_hash is not None:
+            if compare_digest(oid_hash, existing_oid_hash):
                 new_api_key = api_key
             else:
                 # invalidate old API key and provision a new one
