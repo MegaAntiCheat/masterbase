@@ -626,28 +626,34 @@ def list_demos_helper(
     return rows
 
 
-def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> str | None:
+def check_steam_id_has_api_key(engine: Engine, steam_id: str) -> tuple[str | None, str | None]:
     """Check that a given steam id has an API key or not."""
     with engine.connect() as conn:
         result = conn.execute(
-            sa.text("SELECT api_key FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
-        ).scalar_one_or_none()
+            sa.text("SELECT api_key, oid_hash FROM api_keys WHERE steam_id = :steam_id"), {"steam_id": steam_id}
+        ).one_or_none()
+        if result is None:
+            api_key, oid_hash = None, None
+        else:
+            api_key, oid_hash = result
 
-        return result
+        return api_key, oid_hash
 
 
-def update_api_key(engine: Engine, steam_id: str, new_api_key: str) -> None:
+def update_api_key(engine: Engine, steam_id: str, new_api_key: str, oid_hash: str) -> None:
     """Update an API key."""
     with engine.connect() as conn:
         updated_at = datetime.now().astimezone(timezone.utc).isoformat()
         conn.execute(
-            sa.text("UPDATE api_keys SET api_key = :new_api_key, updated_at = :updated_at WHERE steam_id = :steam_id"),
-            {"steam_id": steam_id, "updated_at": updated_at, "new_api_key": new_api_key},
+            sa.text(
+                "UPDATE api_keys SET api_key = :new_api_key, updated_at = :updated_at, oid_hash = :oid_hash WHERE steam_id = :steam_id"  # noqa
+            ),
+            {"steam_id": steam_id, "updated_at": updated_at, "new_api_key": new_api_key, "oid_hash": oid_hash},
         )
         conn.commit()
 
 
-def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
+def provision_api_key(engine: Engine, steam_id: str, api_key: str, oid_hash: str) -> None:
     """Provision an API key."""
     with engine.connect() as conn:
         created_at = datetime.now().astimezone(timezone.utc).isoformat()
@@ -655,11 +661,17 @@ def provision_api_key(engine: Engine, steam_id: str, api_key: str) -> None:
         conn.execute(
             sa.text(
                 """INSERT INTO api_keys (
-                    steam_id, api_key, created_at, updated_at
+                    steam_id, api_key, created_at, updated_at, oid_hash
                     ) VALUES (
-                        :steam_id, :api_key, :created_at, :updated_at);"""
+                        :steam_id, :api_key, :created_at, :updated_at, :oid_hash);"""
             ),
-            {"steam_id": steam_id, "api_key": api_key, "created_at": created_at, "updated_at": updated_at},
+            {
+                "steam_id": steam_id,
+                "api_key": api_key,
+                "created_at": created_at,
+                "updated_at": updated_at,
+                "oid_hash": oid_hash,
+            },
         )
         conn.commit()
 

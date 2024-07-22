@@ -3,6 +3,7 @@
 import logging
 import os
 from datetime import datetime, timezone
+from hmac import compare_digest
 from urllib.parse import unquote, urlencode
 
 import requests
@@ -348,16 +349,20 @@ def provision_handler(request: Request) -> str:
             add_loser(app.state.engine, steam_id)
             return "limited"
 
-        api_key = check_steam_id_has_api_key(engine, steam_id)
+        api_key, existing_oid_hash = check_steam_id_has_api_key(engine, steam_id)
         new_api_key = generate_api_key()
         invalidated_text = ""
-        if api_key is not None:
-            # invalidate old API key and provision a new one
-            invalidated_text = "Your old key was invalidated!"
-            update_api_key(engine, steam_id, new_api_key)
+        oid_hash = str(hash(str(request.url)))
+        if api_key is not None and existing_oid_hash is not None:
+            if compare_digest(oid_hash, existing_oid_hash):
+                new_api_key = api_key
+            else:
+                # invalidate old API key and provision a new one
+                invalidated_text = "Your old key was invalidated!"
+                update_api_key(engine, steam_id, new_api_key, oid_hash)
 
         else:
-            provision_api_key(engine, steam_id, new_api_key)
+            provision_api_key(engine, steam_id, new_api_key, oid_hash)
 
         text = f"Successfully authenticated! Your API key is '{new_api_key}' {invalidated_text} Do not lose this as the client needs it!"  # noqa
 
