@@ -377,7 +377,7 @@ def is_limited_account(steam_id: str) -> bool:
     False if the player does not exist.
     """
     if not account_exists(steam_id):
-        return False
+        return True
     player = player_summary(steam_id)
     limited = not bool(player.get("profilestate", False))
     return limited

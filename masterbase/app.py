@@ -325,8 +325,8 @@ def provision_handler(request: Request) -> str:
     decoded = response.content.decode()
     _, valid_str, _ = decoded.split("\n")
     # valid_str looks like `is_valid:true`
-    valid = bool(valid_str.split(":"))
-
+    _valid = valid_str.split(":")[-1]
+    valid = _valid == "true"
     if not valid:
         text = "Could not log you in!"
 
