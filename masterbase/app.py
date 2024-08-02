@@ -124,7 +124,7 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
     if error is None:
         return {"late_bytes": True}
     else:
-        logger.debug(f"Error: {error}")
+        logger.info(f"Error: {error}")
         raise HTTPException(detail=error, status_code=422, extra={"late_bytes": False})
 
 
