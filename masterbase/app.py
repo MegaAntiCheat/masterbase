@@ -2,6 +2,7 @@
 
 import logging
 import os
+import time
 from datetime import datetime, timezone
 from hmac import compare_digest
 from urllib.parse import unquote, urlencode
@@ -61,6 +62,12 @@ logger = logging.getLogger(__name__)
 streaming_sessions: SocketManagerMapType = {}
 
 
+@get("/", sync_to_thread=False)
+def landing() -> Redirect:
+    """Redirect to github page."""
+    return Redirect(path="https://github.com/MegaAntiCheat/client-backend")
+
+
 @get("/session_id", guards=[valid_key_guard, user_in_session_guard, valid_session_guard], sync_to_thread=False)
 def session_id(
     request: Request,
@@ -116,6 +123,8 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
     Returns:
         {"late_bytes": True}
     """
+    # sleep for 2 seconds to prevent race condition from user workflow
+    time.sleep(2)
     engine = request.app.state.engine
     current_time = datetime.now().astimezone(timezone.utc)
     steam_id = steam_id_from_api_key(engine, api_key)
@@ -397,6 +406,7 @@ def plain_text_exception_handler(_: Request, exception: Exception) -> Response:
 app = Litestar(
     on_startup=startup_registers,
     route_handlers=[
+        landing,
         session_id,
         close_session,
         DemoHandler,
