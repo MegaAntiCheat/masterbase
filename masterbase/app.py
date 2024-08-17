@@ -129,7 +129,8 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
     current_time = datetime.now().astimezone(timezone.utc)
     steam_id = steam_id_from_api_key(engine, api_key)
     converted_late_bytes = bytes.fromhex(data.late_bytes)
-    error = late_bytes_helper(engine, steam_id, converted_late_bytes, current_time)
+    session_id = data.session_id
+    error = late_bytes_helper(engine, steam_id, converted_late_bytes, current_time, session_id)
     if error is None:
         return {"late_bytes": True}
     else:
