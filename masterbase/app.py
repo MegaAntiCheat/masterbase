@@ -268,10 +268,17 @@ def provision(request: Request) -> Redirect:
     """
     # enforce https on base_url
     base_url = str(request.base_url)
-    if base_url.startswith("http") and not os.getenv["DEVELOPMENT"]:
-        base_url = base_url.replace("http", "https", 1)
-    elif not "://" in base_url:
-        base_url = f"https://{base_url}"
+    if os.getenv("DEVELOPMENT") and os.getenv("DEVELOPMENT").lower() == "true":
+        if base_url.startswith("https://"):
+            base_url = base_url.replace("https://", "http://")
+        else:
+            base_url = "http://" + base_url
+    else:
+        if base_url.startswith("http://"):
+            base_url = base_url.replace("http://", "https://")
+        else:
+            base_url = "https://" + base_url
+
 
     auth_params = {
         "openid.ns": "http://specs.openid.net/auth/2.0",
