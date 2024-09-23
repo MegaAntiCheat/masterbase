@@ -84,7 +84,9 @@ def session_id(
     steam_id = steam_id_from_api_key(engine, api_key)
 
     fake_ip = unquote(fake_ip)
-    if not fake_ip.startswith("169"):
+    if not fake_ip.startswith("169.254"):
+        if ":" not in fake_ip:
+            fake_ip = f"{fake_ip}:27015"
         to_resolve, port = fake_ip.split(":")
         fake_ip = f"{resolve_hostname(to_resolve)}:{port}"
     start_session_helper(engine, steam_id, str(_session_id), demo_name, fake_ip, map)
