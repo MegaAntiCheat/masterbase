@@ -271,7 +271,7 @@ def provision(request: Request) -> Redirect:
     # enforce https on base_url
     base_url = str(request.base_url)
     dev_mode = os.getenv('DEVELOPMENT', 'false')
-    proto = "http://" if dev_mode is not None and dev_mode.lower() == 'true' else "https://"
+    proto = "http://" if dev_mode.lower() == 'true' else "https://"
     base_url = proto + base_url.split("//")[-1]
 
     auth_params = {
