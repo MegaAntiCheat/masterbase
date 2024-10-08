@@ -539,40 +539,57 @@ def late_bytes_helper(
     steam_id: str,
     late_bytes: bytes,
     current_time: datetime,
+    session_id: str | None = None,
 ) -> str | None:
     """Add late bytes to the database and blob storage.
 
     No-ops and returns an error message if late bytes are found or there are no active sessions.
     """
     with engine.connect() as conn:
-        try:
-            session_id, old_late_bytes = conn.execute(
+        if session_id is not None:
+            conn.execute(
                 sa.text(
-                    """SELECT session_id, late_bytes FROM demo_sessions
-                    WHERE active = True
-                    AND steam_id = :steam_id;
-                    """,
+                    """UPDATE demo_sessions
+                        SET
+                        late_bytes = :late_bytes,
+                        updated_at = :updated_at
+                        WHERE session_id = session_id;"""
                 ),
-                {"steam_id": steam_id},
-            ).one()
-        except NoResultFound:
-            return "no active session"
-        if session_id and old_late_bytes:
-            return "already submitted"
-        conn.execute(
-            sa.text(
-                """UPDATE demo_sessions
-                    SET
-                    late_bytes = :late_bytes,
-                    updated_at = :updated_at
-                    WHERE session_id = session_id;"""
-            ),
-            {
-                "session_id": session_id,
-                "late_bytes": late_bytes,
-                "updated_at": current_time.isoformat(),
-            },
-        )
+                {
+                    "session_id": session_id,
+                    "late_bytes": late_bytes,
+                    "updated_at": current_time.isoformat(),
+                },
+            )
+        else:
+            try:
+                session_id, old_late_bytes = conn.execute(
+                    sa.text(
+                        """SELECT session_id, late_bytes FROM demo_sessions
+                        WHERE active = True
+                        AND steam_id = :steam_id;
+                        """,
+                    ),
+                    {"steam_id": steam_id},
+                ).one()
+            except NoResultFound:
+                return "no active session"
+            if session_id and old_late_bytes:
+                return "already submitted"
+            conn.execute(
+                sa.text(
+                    """UPDATE demo_sessions
+                        SET
+                        late_bytes = :late_bytes,
+                        updated_at = :updated_at
+                        WHERE session_id = session_id;"""
+                ),
+                {
+                    "session_id": session_id,
+                    "late_bytes": late_bytes,
+                    "updated_at": current_time.isoformat(),
+                },
+            )
         conn.commit()
         return None
 

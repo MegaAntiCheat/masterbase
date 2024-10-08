@@ -1,6 +1,7 @@
 """Module of pydantic models."""
 
 from enum import Enum
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -31,3 +32,4 @@ class LateBytesBody(BaseModel):
     """Report model for late_bytes post request body."""
 
     late_bytes: str
+    session_id: Optional[str] = None
