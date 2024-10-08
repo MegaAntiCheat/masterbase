@@ -307,7 +307,19 @@ async def check_analyst(engine: AsyncEngine, steam_id: str) -> bool:
 
 def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
     """Get a list of uningested demos."""
-    sql = "SELECT session_id FROM demo_sessions WHERE ingested = false ORDER BY created_at ASC LIMIT :limit;"
+    sql = """
+        SELECT
+            session_id
+        FROM
+            demo_sessions
+        WHERE
+            active = false
+            AND open = false
+            AND ingested = false
+        ORDER BY
+            created_at ASC
+        LIMIT :limit;
+    """
     params = {"limit": limit}
 
     with engine.connect() as conn:
