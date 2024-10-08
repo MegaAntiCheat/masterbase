@@ -51,7 +51,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
-from masterbase.models import ExportTable, LateBytesBody, ReportBody
+from masterbase.models import ExportTable, LateBytesBody, ReportBody, IngestBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -195,6 +195,26 @@ def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
             "Content-Disposition": f"attachment; filename={filename}",
         },
     )
+
+@get("/jobs", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+def jobs(request: Request, api_key: str, limit: int = 1) -> list[dict[str, str]]:
+    """Return a list of demos that need analysis."""
+    engine = request.app.state.engine
+    demos = get_uningested_demos(engine, limit)
+    
+    return demos
+
+@post("/ingest", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+def ingest(request: Request, api_key: str, session_id: str, data: IngestBody) -> dict[str, bool]:
+    """Upload completed analysis."""
+    try:
+        data = IngestBody(**data)
+    except pydantic.ValidationError as e:
+        raise HTTPException(status_code=400, detail="Malformed analysis data.")
+
+    ingest_demo(request.app.state.engine, session_id, data)
+    
+    return {"ingest_successful": True}
 
 
 @post("/report", guards=[valid_key_guard])

@@ -20,6 +20,17 @@ class ReportBody(BaseModel):
     reason: ReportReason
 
 
+class Detection(BaseModel):
+    """A single detection from the analysis client."""
+    tick: int
+    algorithm: str
+    player: int
+    data: dict
+
+class IngestBody(BaseModel):
+    """The body of the POST /demos endpoint."""
+    detections: list[Detection]
+
 class ExportTable(str, Enum):
     """Tables to be allowed in database exports."""
 

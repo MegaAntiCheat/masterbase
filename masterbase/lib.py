@@ -21,6 +21,7 @@ from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from masterbase.anomaly import DetectionState
+from masterbase.models import IngestBody
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +303,63 @@ async def check_analyst(engine: AsyncEngine, steam_id: str) -> bool:
         analyst = True if result is not None else False
 
         return analyst
+
+
+def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
+    """Get a list of uningested demos."""
+    sql = "SELECT session_id FROM demo_sessions WHERE ingested = false ORDER BY created_at ASC LIMIT :limit;"
+    params = {"limit": limit}
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text(sql),
+            params,
+        )
+
+        data = result.all()
+        uningested_demos = [row["session_id"] for row in data]
+
+        return uningested_demos
+
+
+def ingest_demo(engine: Engine, session_id: str, data: IngestBody):
+    """Ingest a demo analysis from an analysis client."""
+
+    # ensure the demo session is not already ingested
+    is_ingested_sql = "SELECT ingested FROM demo_sessions WHERE session_id = :session_id;"
+
+    # Wipe existing analysis data (we want to be able to reingest a demo if necessary by manually setting ingested = false)
+    analysis_sql = "DELETE FROM analysis WHERE session_id = :session_id;"
+    reviews_sql = "DELETE FROM reviews WHERE session_id = :session_id;"
+
+    # Mark the demo as ingested
+    mark_ingested_sql = "UPDATE demo_sessions SET ingested = true WHERE session_id = :session_id;"
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text(is_ingested_sql),
+            {"session_id": session_id},
+        )
+
+        data = result.one_or_none()
+        if data is None:
+            return "demo not found"
+        if data["ingested"]:
+            return "demo already ingested"
+
+        conn.execute(
+            sa.text(analysis_sql),
+            {"session_id": session_id},
+        )
+        conn.execute(
+            sa.text(reviews_sql),
+            {"session_id": session_id},
+        )
+        conn.execute(
+            sa.text(mark_ingested_sql),
+            {"session_id": session_id},
+        )
+        conn.commit()
 
 
 async def session_closed(engine: AsyncEngine, session_id: str) -> bool:
