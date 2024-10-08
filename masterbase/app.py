@@ -15,6 +15,7 @@ from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Response, Stream
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from sqlalchemy.exc import IntegrityError
+from pydantic import ValidationError
 
 import sys
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -45,6 +46,8 @@ from masterbase.lib import (
     demo_blob_name,
     generate_api_key,
     generate_uuid4_int,
+    get_uningested_demos,
+    ingest_demo,
     late_bytes_helper,
     list_demos_helper,
     provision_api_key,
@@ -213,7 +216,7 @@ def ingest(request: Request, api_key: str, session_id: str, data: IngestBody) ->
     """Upload completed analysis."""
     try:
         data = IngestBody(**data)
-    except pydantic.ValidationError as e:
+    except ValidationError:
         raise HTTPException(status_code=400, detail="Malformed analysis data.")
 
     ingest_demo(request.app.state.engine, session_id, data)
