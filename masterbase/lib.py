@@ -317,7 +317,7 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
         )
 
         data = result.all()
-        uningested_demos = [row["session_id"] for row in data]
+        uningested_demos = [row[0] for row in data]
 
         return uningested_demos
 

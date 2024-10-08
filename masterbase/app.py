@@ -448,6 +448,8 @@ app = Litestar(
         analyst_list_demos,
         report_player,
         db_export,
+        jobs,
+        ingest
     ],
     exception_handlers={Exception: plain_text_exception_handler},
     on_shutdown=shutdown_registers,
