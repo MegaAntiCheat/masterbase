@@ -341,38 +341,68 @@ def ingest_demo(engine: Engine, session_id: str, data: IngestBody):
     is_ingested_sql = "SELECT ingested FROM demo_sessions WHERE session_id = :session_id;"
 
     # Wipe existing analysis data (we want to be able to reingest a demo if necessary by manually setting ingested = false)
-    analysis_sql = "DELETE FROM analysis WHERE session_id = :session_id;"
-    reviews_sql = "DELETE FROM reviews WHERE session_id = :session_id;"
+    wipe_analysis_sql = "DELETE FROM analysis WHERE session_id = :session_id;"
+    wipe_reviews_sql = "DELETE FROM reviews WHERE session_id = :session_id;"
+
+    # Insert the analysis data
+    detections = data.detections
+    algorithm_counts = {}
+    for detection in detections:
+        key = (detection.player, detection.algorithm)
+        if key not in algorithm_counts:
+            algorithm_counts[key] = 0
+        algorithm_counts[key] += 1
+
+    insert_sql = """\
+        INSERT INTO analysis (
+            session_id, target_steam_id, algorithm_type, detection_count
+        ) VALUES (
+            :session_id, :target_steam_id, :algorithm, :count
+        );
+    """
 
     # Mark the demo as ingested
     mark_ingested_sql = "UPDATE demo_sessions SET ingested = true WHERE session_id = :session_id;"
 
     with engine.connect() as conn:
-        result = conn.execute(
-            sa.text(is_ingested_sql),
-            {"session_id": session_id},
-        )
+        with conn.begin():
+            result = conn.execute(
+                sa.text(is_ingested_sql),
+                {"session_id": session_id},
+            )
 
-        data = result.one_or_none()
-        if data is None:
-            return "demo not found"
-        if data["ingested"]:
-            return "demo already ingested"
+            data = result.one_or_none()
+            if data is None:
+                conn.rollback()
+                return "demo not found"
+            if data["ingested"]:
+                conn.rollback()
+                return "demo already ingested"
 
-        conn.execute(
-            sa.text(analysis_sql),
-            {"session_id": session_id},
-        )
-        conn.execute(
-            sa.text(reviews_sql),
-            {"session_id": session_id},
-        )
-        conn.execute(
-            sa.text(mark_ingested_sql),
-            {"session_id": session_id},
-        )
-        conn.commit()
+            conn.execute(
+                sa.text(wipe_analysis_sql),
+                {"session_id": session_id},
+            )
+            conn.execute(
+                sa.text(wipe_reviews_sql),
+                {"session_id": session_id},
+            )
 
+            for key, count in algorithm_counts.items():
+                conn.execute(
+                    sa.text(insert_sql),         
+                    {
+                        "session_id": session_id,
+                        "target_steam_id": key[0],
+                        "algorithm": key[1],
+                        "count": count,
+                    },
+                )
+
+            conn.execute(
+                sa.text(mark_ingested_sql),
+                {"session_id": session_id},
+            )
 
 async def session_closed(engine: AsyncEngine, session_id: str) -> bool:
     """Determine if a session is active."""

@@ -22,12 +22,18 @@ def upgrade() -> None:
     """Add analysis and review tables."""
     op.execute(
         """
+        CREATE TYPE verdict AS ENUM ('none', 'benign', 'inconclusive', 'confirmed', 'error');
+        """
+    )
+    op.execute(
+        """
         CREATE TABLE analysis (
             session_id varchar REFERENCES demo_sessions,
             target_steam_id varchar,
-            created_at timestamptz,
+            algorithm_type varchar,
             detection_count int,
-            PRIMARY KEY (session_id, target_steam_id)
+            created_at timestamptz,
+            PRIMARY KEY (session_id, target_steam_id, algorithm_type)
         );
         """
     )
@@ -37,8 +43,8 @@ def upgrade() -> None:
             session_id varchar REFERENCES demo_sessions,
             target_steam_id varchar,
             reviewer_steam_id varchar,
+            verdict verdict,
             created_at timestamptz,
-            verdict varchar,
             PRIMARY KEY (session_id, target_steam_id, reviewer_steam_id)
         );
         """
@@ -53,3 +59,4 @@ def downgrade() -> None:
         DROP TABLE reviews;
         """
     )
+    op.execute("DROP TYPE verdict;")
