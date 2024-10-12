@@ -27,7 +27,7 @@ class Detection(BaseModel):
     player: int
     data: dict
 
-class IngestBody(BaseModel):
+class Analysis(BaseModel):
     """The body of the POST /demos endpoint."""
     detections: list[Detection]
 

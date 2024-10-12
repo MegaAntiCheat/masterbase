@@ -16,12 +16,13 @@ import sqlalchemy as sa
 from litestar import WebSocket
 from minio import Minio, S3Error
 from minio.datatypes import Object as BlobStat
+from pydantic import ValidationError
 from sqlalchemy import Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from masterbase.anomaly import DetectionState
-from masterbase.models import IngestBody
+from masterbase.models import Analysis
 
 logger = logging.getLogger(__name__)
 
@@ -334,8 +335,20 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
         return uningested_demos
 
 
-def ingest_demo(engine: Engine, session_id: str, data: IngestBody):
+def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     """Ingest a demo analysis from an analysis client."""
+
+    blob_name = f"jsonblobs/{session_id}.json"
+    try:
+        data = minio_client.get_object("jsonblobs", blob_name).read().decode("utf-8")
+        data = Analysis.parse_raw(data)
+    except S3Error as err:
+        if err.code == "NoSuchKey":
+            return "no analysis data found."
+        else:
+            return "unknown error while looking up analysis data."
+    except ValidationError:
+        return "malformed analysis data."
 
     # ensure the demo session is not already ingested
     is_ingested_sql = "SELECT ingested FROM demo_sessions WHERE session_id = :session_id;"

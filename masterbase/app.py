@@ -58,7 +58,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
-from masterbase.models import ExportTable, LateBytesBody, ReportBody, IngestBody
+from masterbase.models import ExportTable, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -212,14 +212,10 @@ def jobs(request: Request, api_key: str, limit: int = 1) -> list[dict[str, str]]
     return demos
 
 @post("/ingest", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def ingest(request: Request, api_key: str, session_id: str, data: IngestBody) -> dict[str, bool]:
-    """Upload completed analysis."""
-    try:
-        data = IngestBody(**data)
-    except ValidationError:
-        raise HTTPException(status_code=400, detail="Malformed analysis data.")
-
-    ingest_demo(request.app.state.engine, session_id, data)
+def ingest(request: Request, api_key: str, session_id: str) -> dict[str, bool]:
+    """Report analysis as completed, ingest into database."""
+    minio_client = request.app.state.minio_client
+    ingest_demo(minio_client, request.app.state.engine, session_id)
     
     return {"ingest_successful": True}
 
