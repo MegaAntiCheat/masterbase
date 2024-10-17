@@ -218,8 +218,8 @@ def ingest(request: Request, api_key: str, session_id: str) -> dict[str, bool]:
     err = ingest_demo(minio_client, request.app.state.engine, session_id)
     
     if err is None:
-        return {"ingest_successful": True}
-    return {"ingest_successful": False, "error": err}
+        return {"ingested": True}
+    raise HTTPException(detail=f"Internal Error Occured: {err}", status_code=500)
 
 
 @post("/report", guards=[valid_key_guard])

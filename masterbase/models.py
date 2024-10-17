@@ -1,6 +1,7 @@
 """Module of pydantic models."""
 
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -25,7 +26,7 @@ class Detection(BaseModel):
     tick: int
     algorithm: str
     player: int
-    data: dict
+    data: Any
 
 class Analysis(BaseModel):
     """The body of the POST /demos endpoint."""

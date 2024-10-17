@@ -344,14 +344,9 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     try:
         # Skip 2 bytes to avoid utf-16 decoding issues
         data = minio_client.get_object("jsonblobs", blob_name, 2).read(decode_content=True)
-        print("bytes")
-        print(data)
         data = data.decode("utf-16-le")
-        print("string")
-        print(data)
         data = json.JSONDecoder().decode(data)
-        print("json")
-        print(data)
+        data = Analysis.parse_obj(data)
     except S3Error as err:
         if err.code == "NoSuchKey":
             return "no analysis data found."
@@ -361,6 +356,15 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
         print(err)
         return "malformed analysis data."
 
+    # Data preprocessing
+    print(data)
+    algorithm_counts = {}
+    for detection in data.detections:
+        key = (detection.player, detection.algorithm)
+        if key not in algorithm_counts:
+            algorithm_counts[key] = 0
+        algorithm_counts[key] += 1
+
     # ensure the demo session is not already ingested
     is_ingested_sql = "SELECT ingested FROM demo_sessions WHERE session_id = :session_id;"
 
@@ -369,14 +373,6 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     wipe_reviews_sql = "DELETE FROM reviews WHERE session_id = :session_id;"
 
     # Insert the analysis data
-    detections = data.detections
-    algorithm_counts = {}
-    for detection in detections:
-        key = (detection.player, detection.algorithm)
-        if key not in algorithm_counts:
-            algorithm_counts[key] = 0
-        algorithm_counts[key] += 1
-
     insert_sql = """\
         INSERT INTO analysis (
             session_id, target_steam_id, algorithm_type, detection_count
@@ -395,11 +391,11 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
                 {"session_id": session_id},
             )
 
-            data = result.one_or_none()
-            if data is None:
+            result = result.one_or_none()
+            if result is None:
                 conn.rollback()
                 return "demo not found"
-            if data["ingested"]:
+            if result.ingested is True:
                 conn.rollback()
                 return "demo already ingested"
 
@@ -414,7 +410,7 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
 
             for key, count in algorithm_counts.items():
                 conn.execute(
-                    sa.text(insert_sql),         
+                    sa.text(insert_sql),
                     {
                         "session_id": session_id,
                         "target_steam_id": key[0],
