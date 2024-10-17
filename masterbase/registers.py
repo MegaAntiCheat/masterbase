@@ -16,6 +16,8 @@ def get_minio_connection(app: Litestar) -> Minio:
         minio_client = make_minio_client()
         if not minio_client.bucket_exists("demoblobs"):
             minio_client.make_bucket("demoblobs", "us-east-1")
+        if not minio_client.bucket_exists("jsonblobs"):
+            minio_client.make_bucket("jsonblobs", "us-east-1")
         app.state.minio_client = minio_client
 
     return cast(Minio, app.state.minio_client)

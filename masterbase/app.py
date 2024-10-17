@@ -215,9 +215,11 @@ def jobs(request: Request, api_key: str, limit: int = 1) -> list[dict[str, str]]
 def ingest(request: Request, api_key: str, session_id: str) -> dict[str, bool]:
     """Report analysis as completed, ingest into database."""
     minio_client = request.app.state.minio_client
-    ingest_demo(minio_client, request.app.state.engine, session_id)
+    err = ingest_demo(minio_client, request.app.state.engine, session_id)
     
-    return {"ingest_successful": True}
+    if err is None:
+        return {"ingest_successful": True}
+    return {"ingest_successful": False, "error": err}
 
 
 @post("/report", guards=[valid_key_guard])

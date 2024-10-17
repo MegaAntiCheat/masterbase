@@ -29,7 +29,11 @@ class Detection(BaseModel):
 
 class Analysis(BaseModel):
     """The body of the POST /demos endpoint."""
+    author: str
     detections: list[Detection]
+    duration: int
+    map: str
+    server_ip: str
 
 class ExportTable(str, Enum):
     """Tables to be allowed in database exports."""

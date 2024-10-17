@@ -2,6 +2,7 @@
 
 import hashlib
 import io
+import json
 import logging
 import os
 import secrets
@@ -17,6 +18,7 @@ from litestar import WebSocket
 from minio import Minio, S3Error
 from minio.datatypes import Object as BlobStat
 from pydantic import ValidationError
+from pydantic_core import from_json
 from sqlalchemy import Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -338,16 +340,25 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
 def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     """Ingest a demo analysis from an analysis client."""
 
-    blob_name = f"jsonblobs/{session_id}.json"
+    blob_name = f"{session_id}.json"
     try:
-        data = minio_client.get_object("jsonblobs", blob_name).read().decode("utf-8")
-        data = Analysis.parse_raw(data)
+        # Skip 2 bytes to avoid utf-16 decoding issues
+        data = minio_client.get_object("jsonblobs", blob_name, 2).read(decode_content=True)
+        print("bytes")
+        print(data)
+        data = data.decode("utf-16-le")
+        print("string")
+        print(data)
+        data = json.JSONDecoder().decode(data)
+        print("json")
+        print(data)
     except S3Error as err:
         if err.code == "NoSuchKey":
             return "no analysis data found."
         else:
-            return "unknown error while looking up analysis data."
-    except ValidationError:
+            return "unknown S3 error while looking up analysis data."
+    except ValidationError as err:
+        print(err)
         return "malformed analysis data."
 
     # ensure the demo session is not already ingested
@@ -416,6 +427,7 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
                 sa.text(mark_ingested_sql),
                 {"session_id": session_id},
             )
+    return None
 
 async def session_closed(engine: AsyncEngine, session_id: str) -> bool:
     """Determine if a session is active."""
