@@ -398,6 +398,12 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
             if result.ingested is True:
                 conn.rollback()
                 return "demo already ingested"
+            if result.active is True:
+                conn.rollback()
+                return "session is still active"
+            if result.open is True:
+                conn.rollback()
+                return "session is still open"
 
             conn.execute(
                 sa.text(wipe_analysis_sql),
