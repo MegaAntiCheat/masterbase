@@ -216,7 +216,6 @@ def ingest(request: Request, api_key: str, session_id: str) -> dict[str, bool]:
     """Report analysis as completed, ingest into database."""
     minio_client = request.app.state.minio_client
     err = ingest_demo(minio_client, request.app.state.engine, session_id)
-    
     if err is None:
         return {"ingested": True}
     raise HTTPException(detail=f"Internal Error Occured: {err}", status_code=500)

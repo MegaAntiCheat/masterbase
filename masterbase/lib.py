@@ -319,6 +319,8 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
             active = false
             AND open = false
             AND ingested = false
+            AND demo_size > 0
+            AND blob_name IS NOT NULL
         ORDER BY
             created_at ASC
         LIMIT :limit;
@@ -342,9 +344,8 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
 
     blob_name = f"{session_id}.json"
     try:
-        # Skip 2 bytes to avoid utf-16 decoding issues
-        data = minio_client.get_object("jsonblobs", blob_name, 2).read(decode_content=True)
-        data = data.decode("utf-16-le")
+        data = minio_client.get_object("jsonblobs", blob_name).read()
+        data = data.decode("utf-8")
         data = json.JSONDecoder().decode(data)
         data = Analysis.parse_obj(data)
     except S3Error as err:
@@ -353,11 +354,9 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
         else:
             return "unknown S3 error while looking up analysis data."
     except ValidationError as err:
-        print(err)
         return "malformed analysis data."
 
     # Data preprocessing
-    print(data)
     algorithm_counts = {}
     for detection in data.detections:
         key = (detection.player, detection.algorithm)
@@ -366,7 +365,7 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
         algorithm_counts[key] += 1
 
     # ensure the demo session is not already ingested
-    is_ingested_sql = "SELECT ingested FROM demo_sessions WHERE session_id = :session_id;"
+    is_ingested_sql = "SELECT ingested, active, open FROM demo_sessions WHERE session_id = :session_id;"
 
     # Wipe existing analysis data (we want to be able to reingest a demo if necessary by manually setting ingested = false)
     wipe_analysis_sql = "DELETE FROM analysis WHERE session_id = :session_id;"
