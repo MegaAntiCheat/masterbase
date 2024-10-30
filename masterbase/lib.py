@@ -374,14 +374,15 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     # Insert the analysis data
     insert_sql = """\
         INSERT INTO analysis (
-            session_id, target_steam_id, algorithm_type, detection_count
+            session_id, target_steam_id, algorithm_type, detection_count, created_at
         ) VALUES (
-            :session_id, :target_steam_id, :algorithm, :count
+            :session_id, :target_steam_id, :algorithm, :count, :created_at
         );
     """
 
     # Mark the demo as ingested
     mark_ingested_sql = "UPDATE demo_sessions SET ingested = true WHERE session_id = :session_id;"
+    created_at = datetime.now().astimezone(timezone.utc).isoformat()
 
     with engine.connect() as conn:
         with conn.begin():
@@ -421,6 +422,7 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
                         "target_steam_id": key[0],
                         "algorithm": key[1],
                         "count": count,
+                        "created_at": created_at,
                     },
                 )
 
