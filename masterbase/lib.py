@@ -18,7 +18,6 @@ from litestar import WebSocket
 from minio import Minio, S3Error
 from minio.datatypes import Object as BlobStat
 from pydantic import ValidationError
-from pydantic_core import from_json
 from sqlalchemy import Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -341,7 +340,6 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
 
 def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     """Ingest a demo analysis from an analysis client."""
-
     blob_name = f"{session_id}.json"
     try:
         data = minio_client.get_object("jsonblobs", blob_name).read()
@@ -353,7 +351,7 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
             return "no analysis data found."
         else:
             return "unknown S3 error while looking up analysis data."
-    except ValidationError as err:
+    except ValidationError:
         return "malformed analysis data."
 
     # Data preprocessing
@@ -367,7 +365,8 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     # ensure the demo session is not already ingested
     is_ingested_sql = "SELECT ingested, active, open FROM demo_sessions WHERE session_id = :session_id;"
 
-    # Wipe existing analysis data (we want to be able to reingest a demo if necessary by manually setting ingested = false)
+    # Wipe existing analysis data
+    # (we want to be able to reingest a demo if necessary by manually setting ingested = false)
     wipe_analysis_sql = "DELETE FROM analysis WHERE session_id = :session_id;"
     wipe_reviews_sql = "DELETE FROM reviews WHERE session_id = :session_id;"
 

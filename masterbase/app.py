@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 import time
 from datetime import datetime, timezone
 from hmac import compare_digest
@@ -15,12 +16,6 @@ from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Response, Stream
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from sqlalchemy.exc import IntegrityError
-from pydantic import ValidationError
-
-import sys
-
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.dirname(CURRENT_DIR))
 
 from masterbase.anomaly import DetectionState
 from masterbase.guards import (
@@ -62,6 +57,9 @@ from masterbase.lib import (
 from masterbase.models import ExportTable, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(CURRENT_DIR))
 
 logger = logging.getLogger(__name__)
 
