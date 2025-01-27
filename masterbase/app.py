@@ -17,6 +17,12 @@ from litestar.response import Redirect, Response, Stream
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
 from sqlalchemy.exc import IntegrityError
 
+# This is required for Docker Desktop on windows to detect the module
+# Also requires the error suppression below. Too bad!
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(CURRENT_DIR))
+
+# ruff: noqa: E402
 from masterbase.anomaly import DetectionState
 from masterbase.guards import (
     analyst_guard,
@@ -57,9 +63,6 @@ from masterbase.lib import (
 from masterbase.models import ExportTable, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
-
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-sys.path.append(os.path.dirname(CURRENT_DIR))
 
 logger = logging.getLogger(__name__)
 
