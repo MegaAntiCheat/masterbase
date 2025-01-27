@@ -204,7 +204,7 @@ def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
 
 
 @get("/jobs", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def jobs(request: Request, api_key: str, limit: int = 1) -> list[dict[str, str]]:
+def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
     """Return a list of demos that need analysis."""
     engine = request.app.state.engine
     demos = get_uningested_demos(engine, limit)

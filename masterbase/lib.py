@@ -342,10 +342,10 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     """Ingest a demo analysis from an analysis client."""
     blob_name = f"{session_id}.json"
     try:
-        data = minio_client.get_object("jsonblobs", blob_name).read()
-        data = data.decode("utf-8")
-        data = json.JSONDecoder().decode(data)
-        data = Analysis.parse_obj(data)
+        raw_data = minio_client.get_object("jsonblobs", blob_name).read()
+        decoded_data = raw_data.decode("utf-8")
+        json_data = json.JSONDecoder().decode(decoded_data)
+        data = Analysis.parse_obj(json_data)
     except S3Error as err:
         if err.code == "NoSuchKey":
             return "no analysis data found."
@@ -385,12 +385,12 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
 
     with engine.connect() as conn:
         with conn.begin():
-            result = conn.execute(
+            command = conn.execute(
                 sa.text(is_ingested_sql),
                 {"session_id": session_id},
             )
 
-            result = result.one_or_none()
+            result = command.one_or_none()
             if result is None:
                 conn.rollback()
                 return "demo not found"
