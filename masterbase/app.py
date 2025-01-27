@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from pydantic import ValidationError
 
 import sys
+
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(CURRENT_DIR))
 
@@ -203,13 +204,15 @@ def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
         },
     )
 
+
 @get("/jobs", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
 def jobs(request: Request, api_key: str, limit: int = 1) -> list[dict[str, str]]:
     """Return a list of demos that need analysis."""
     engine = request.app.state.engine
     demos = get_uningested_demos(engine, limit)
-    
+
     return demos
+
 
 @post("/ingest", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
 def ingest(request: Request, api_key: str, session_id: str) -> dict[str, bool]:
@@ -303,8 +306,8 @@ def provision(request: Request) -> Redirect:
     """
     # enforce https on base_url
     base_url = str(request.base_url)
-    dev_mode = os.getenv('DEVELOPMENT', 'false')
-    proto = "http://" if dev_mode.lower() == 'true' else "https://"
+    dev_mode = os.getenv("DEVELOPMENT", "false")
+    proto = "http://" if dev_mode.lower() == "true" else "https://"
     base_url = proto + base_url.split("//")[-1]
 
     auth_params = {
@@ -446,7 +449,7 @@ app = Litestar(
         report_player,
         db_export,
         jobs,
-        ingest
+        ingest,
     ],
     exception_handlers={Exception: plain_text_exception_handler},
     on_shutdown=shutdown_registers,

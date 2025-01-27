@@ -432,6 +432,7 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
             )
     return None
 
+
 async def session_closed(engine: AsyncEngine, session_id: str) -> bool:
     """Determine if a session is active."""
     sql = "SELECT active FROM demo_sessions WHERE session_id = :session_id;"

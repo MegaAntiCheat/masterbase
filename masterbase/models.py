@@ -23,18 +23,22 @@ class ReportBody(BaseModel):
 
 class Detection(BaseModel):
     """A single detection from the analysis client."""
+
     tick: int
     algorithm: str
     player: int
     data: Any
 
+
 class Analysis(BaseModel):
     """The body of the POST /demos endpoint."""
+
     author: str
     detections: list[Detection]
     duration: int
     map: str
     server_ip: str
+
 
 class ExportTable(str, Enum):
     """Tables to be allowed in database exports."""
