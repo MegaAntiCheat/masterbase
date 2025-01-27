@@ -12,6 +12,8 @@ EXPOSE 9001
 
 
 COPY services/minio/start.sh /usr/local/bin/start.sh
+RUN tr -d '\r' < /usr/local/bin/start.sh > /usr/local/bin/start_unix.sh && mv /usr/local/bin/start_unix.sh /usr/local/bin/start.sh
+
 RUN chmod +x /usr/local/bin/start.sh
 
 ENTRYPOINT /usr/local/bin/start.sh

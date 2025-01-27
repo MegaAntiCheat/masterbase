@@ -1,6 +1,7 @@
 """Module of pydantic models."""
 
 from enum import Enum
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -18,6 +19,25 @@ class ReportBody(BaseModel):
     session_id: str
     target_steam_id: int
     reason: ReportReason
+
+
+class Detection(BaseModel):
+    """A single detection from the analysis client."""
+
+    tick: int
+    algorithm: str
+    player: int
+    data: Any
+
+
+class Analysis(BaseModel):
+    """The body of the POST /demos endpoint."""
+
+    author: str
+    detections: list[Detection]
+    duration: int
+    map: str
+    server_ip: str
 
 
 class ExportTable(str, Enum):

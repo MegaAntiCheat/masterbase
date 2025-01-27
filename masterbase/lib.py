@@ -2,6 +2,7 @@
 
 import hashlib
 import io
+import json
 import logging
 import os
 import secrets
@@ -16,11 +17,13 @@ import sqlalchemy as sa
 from litestar import WebSocket
 from minio import Minio, S3Error
 from minio.datatypes import Object as BlobStat
+from pydantic import ValidationError
 from sqlalchemy import Engine
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from masterbase.anomaly import DetectionState
+from masterbase.models import Analysis
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +305,131 @@ async def check_analyst(engine: AsyncEngine, steam_id: str) -> bool:
         analyst = True if result is not None else False
 
         return analyst
+
+
+def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
+    """Get a list of uningested demos."""
+    sql = """
+        SELECT
+            session_id
+        FROM
+            demo_sessions
+        WHERE
+            active = false
+            AND open = false
+            AND ingested = false
+            AND demo_size > 0
+            AND blob_name IS NOT NULL
+        ORDER BY
+            created_at ASC
+        LIMIT :limit;
+    """
+    params = {"limit": limit}
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text(sql),
+            params,
+        )
+
+        data = result.all()
+        uningested_demos = [row[0] for row in data]
+
+        return uningested_demos
+
+
+def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
+    """Ingest a demo analysis from an analysis client."""
+    blob_name = f"{session_id}.json"
+    try:
+        raw_data = minio_client.get_object("jsonblobs", blob_name).read()
+        decoded_data = raw_data.decode("utf-8")
+        json_data = json.JSONDecoder().decode(decoded_data)
+        data = Analysis.parse_obj(json_data)
+    except S3Error as err:
+        if err.code == "NoSuchKey":
+            return "no analysis data found."
+        else:
+            return "unknown S3 error while looking up analysis data."
+    except ValidationError:
+        return "malformed analysis data."
+
+    # Data preprocessing
+    algorithm_counts = {}
+    for detection in data.detections:
+        key = (detection.player, detection.algorithm)
+        if key not in algorithm_counts:
+            algorithm_counts[key] = 0
+        algorithm_counts[key] += 1
+
+    # ensure the demo session is not already ingested
+    is_ingested_sql = "SELECT ingested, active, open FROM demo_sessions WHERE session_id = :session_id;"
+
+    # Wipe existing analysis data
+    # (we want to be able to reingest a demo if necessary by manually setting ingested = false)
+    wipe_analysis_sql = "DELETE FROM analysis WHERE session_id = :session_id;"
+    wipe_reviews_sql = "DELETE FROM reviews WHERE session_id = :session_id;"
+
+    # Insert the analysis data
+    insert_sql = """\
+        INSERT INTO analysis (
+            session_id, target_steam_id, algorithm_type, detection_count, created_at
+        ) VALUES (
+            :session_id, :target_steam_id, :algorithm, :count, :created_at
+        );
+    """
+
+    # Mark the demo as ingested
+    mark_ingested_sql = "UPDATE demo_sessions SET ingested = true WHERE session_id = :session_id;"
+    created_at = datetime.now().astimezone(timezone.utc).isoformat()
+
+    with engine.connect() as conn:
+        with conn.begin():
+            command = conn.execute(
+                sa.text(is_ingested_sql),
+                {"session_id": session_id},
+            )
+
+            result = command.one_or_none()
+            if result is None:
+                conn.rollback()
+                return "demo not found"
+            if result.ingested is True:
+                conn.rollback()
+                return "demo already ingested"
+            if result.active is True:
+                conn.rollback()
+                return "session is still active"
+            if result.open is True:
+                conn.rollback()
+                return "session is still open"
+
+            conn.execute(
+                sa.text(wipe_analysis_sql),
+                {"session_id": session_id},
+            )
+            conn.execute(
+                sa.text(wipe_reviews_sql),
+                {"session_id": session_id},
+            )
+
+            for key, count in algorithm_counts.items():
+                conn.execute(
+                    sa.text(insert_sql),
+                    {
+                        "session_id": session_id,
+                        "target_steam_id": key[0],
+                        "algorithm": key[1],
+                        "count": count,
+                        "created_at": created_at,
+                    },
+                )
+
+            conn.execute(
+                sa.text(mark_ingested_sql),
+                {"session_id": session_id},
+            )
+    return None
 
 
 async def session_closed(engine: AsyncEngine, session_id: str) -> bool:

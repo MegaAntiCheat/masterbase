@@ -2,6 +2,7 @@
 
 import logging
 import os
+import sys
 import time
 from datetime import datetime, timezone
 from hmac import compare_digest
@@ -41,6 +42,8 @@ from masterbase.lib import (
     demo_blob_name,
     generate_api_key,
     generate_uuid4_int,
+    get_uningested_demos,
+    ingest_demo,
     late_bytes_helper,
     list_demos_helper,
     provision_api_key,
@@ -54,6 +57,9 @@ from masterbase.lib import (
 from masterbase.models import ExportTable, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(CURRENT_DIR))
 
 logger = logging.getLogger(__name__)
 
@@ -197,6 +203,25 @@ def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
     )
 
 
+@get("/jobs", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
+    """Return a list of demos that need analysis."""
+    engine = request.app.state.engine
+    demos = get_uningested_demos(engine, limit)
+
+    return demos
+
+
+@post("/ingest", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+def ingest(request: Request, api_key: str, session_id: str) -> dict[str, bool]:
+    """Report analysis as completed, ingest into database."""
+    minio_client = request.app.state.minio_client
+    err = ingest_demo(minio_client, request.app.state.engine, session_id)
+    if err is None:
+        return {"ingested": True}
+    raise HTTPException(detail=f"Internal Error Occured: {err}", status_code=500)
+
+
 @post("/report", guards=[valid_key_guard])
 async def report_player(request: Request, api_key: str, data: ReportBody) -> dict[str, bool]:
     """Add a player report."""
@@ -279,8 +304,8 @@ def provision(request: Request) -> Redirect:
     """
     # enforce https on base_url
     base_url = str(request.base_url)
-    dev_mode = os.getenv('DEVELOPMENT', 'false')
-    proto = "http://" if dev_mode.lower() == 'true' else "https://"
+    dev_mode = os.getenv("DEVELOPMENT", "false")
+    proto = "http://" if dev_mode.lower() == "true" else "https://"
     base_url = proto + base_url.split("//")[-1]
 
     auth_params = {
@@ -421,6 +446,8 @@ app = Litestar(
         analyst_list_demos,
         report_player,
         db_export,
+        jobs,
+        ingest,
     ],
     exception_handlers={Exception: plain_text_exception_handler},
     on_shutdown=shutdown_registers,

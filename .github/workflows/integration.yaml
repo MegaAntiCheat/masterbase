@@ -48,7 +48,7 @@ jobs:
       - name: Create the bucket
         run: ./mc alias set blobs http://127.0.0.1:9000 MEGASCATTERBOMB masterbase
       - name: more minio bs
-        run: ./mc mb -p blobs/demoblobs
+        run: ./mc mb -p blobs/demoblobs && ./mc mb -p blobs/analysisblobs
       - name: Remove mc client
         run: rm -v ./mc
 

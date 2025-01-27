@@ -11,7 +11,8 @@ COPY . .
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-utils \
-    postgresql-client
+    postgresql-client \
+    dos2unix
 
 RUN pdm sync --prod --no-editable
 
@@ -21,5 +22,7 @@ RUN touch /first_run
 
 COPY services/api/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
+
+RUN dos2unix /usr/local/bin/start.sh
 
 ENTRYPOINT /usr/local/bin/start.sh
