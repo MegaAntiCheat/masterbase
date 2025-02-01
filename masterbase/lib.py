@@ -587,7 +587,7 @@ def _close_session_with_demo(
 
 
 def close_session_helper(
-    minio_client: Minio, engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType
+    minio_client: Minio, engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType, late_bytes: bytes | None
 ) -> str:
     """Properly close a session and return a summary message.
 
@@ -618,6 +618,10 @@ def close_session_helper(
         msg = "No active session found, closing anyway."
     else:
         if os.path.exists(session_manager.demo_path):
+            if late_bytes is not None:
+                late_bytes_msg = late_bytes_helper(engine, steam_id, late_bytes, current_time)
+                if late_bytes_msg is not None:
+                    return late_bytes_msg
             _close_session_with_demo(
                 minio_client,
                 engine,
