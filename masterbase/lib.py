@@ -857,3 +857,14 @@ def check_is_loser(engine: Engine, steam_id: str) -> bool:
         ).scalar_one_or_none()
 
         return bool(result)
+
+def get_broadcasts(engine: Engine) -> list[dict[str, str]]:
+    """Get the list of broadcasts"""
+    with engine.connect() as conn:
+        result = conn.execute(
+           sa.text("SELECT * FROM broadcasts")
+        )
+        rows = [row._asdict() for row in result.all()]
+        for row in rows:
+            row["post_date"] = row.pop("created_at")
+        return rows

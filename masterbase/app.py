@@ -48,6 +48,7 @@ from masterbase.lib import (
     demo_blob_name,
     generate_api_key,
     generate_uuid4_int,
+    get_broadcasts,
     get_uningested_demos,
     ingest_demo,
     late_bytes_helper,
@@ -256,6 +257,11 @@ async def report_player(request: Request, api_key: str, data: ReportBody) -> dic
     except IntegrityError:
         raise HTTPException(detail=f"Unknown session ID {data.session_id}", status_code=402)
 
+@get("/broadcasts", sync_to_thread=False)
+def broadcasts(request: Request) -> list[dict[str, str]]:
+    """Return a list of broadcasts."""
+    engine = request.app.state.engine
+    return get_broadcasts(engine)
 
 class DemoHandler(WebsocketListener):
     """Custom Websocket Class."""
@@ -472,6 +478,7 @@ app = Litestar(
         report_player,
         db_export,
         jobs,
+        broadcasts,
         ingest,
     ],
     exception_handlers={Exception: plain_text_exception_handler},
