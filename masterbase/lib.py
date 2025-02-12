@@ -587,7 +587,12 @@ def _close_session_with_demo(
 
 
 def close_session_helper(
-    minio_client: Minio, engine: Engine, steam_id: str, streaming_sessions: SocketManagerMapType, late_bytes: bytes | None
+    minio_client: Minio,
+    engine: Engine,
+    steam_id: str,
+    streaming_sessions:
+    SocketManagerMapType,
+    late_bytes: bytes | None
 ) -> str:
     """Properly close a session and return a summary message.
 
@@ -859,7 +864,7 @@ def check_is_loser(engine: Engine, steam_id: str) -> bool:
         return bool(result)
 
 def get_broadcasts(engine: Engine) -> list[dict[str, str]]:
-    """Get the list of broadcasts"""
+    """Get the list of broadcasts."""
     with engine.connect() as conn:
         result = conn.execute(
            sa.text("SELECT * FROM broadcasts")
