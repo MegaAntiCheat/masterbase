@@ -44,7 +44,7 @@ async def analyst_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None
         raise NotAuthorizedException()
 
 
-async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
     """Assert that the user is not currently in a session."""
     async_engine = connection.app.state.async_engine
 
@@ -59,8 +59,8 @@ async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler)
         )
 
 
-async def user_not_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
-    """Assert that the user is not currently in a session."""
+async def user_in_session_guard(connection: ASGIConnection, _: BaseRouteHandler) -> None:
+    """Assert that the user is currently in a session."""
     async_engine = connection.app.state.async_engine
 
     api_key = connection.query_params["api_key"]

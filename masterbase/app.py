@@ -48,6 +48,7 @@ from masterbase.lib import (
     demo_blob_name,
     generate_api_key,
     generate_uuid4_int,
+    get_broadcasts,
     get_uningested_demos,
     ingest_demo,
     late_bytes_helper,
@@ -77,7 +78,7 @@ def landing() -> Redirect:
     return Redirect(path="https://github.com/MegaAntiCheat/client-backend")
 
 
-@get("/session_id", guards=[valid_key_guard, user_in_session_guard, valid_session_guard], sync_to_thread=False)
+@get("/session_id", guards=[valid_key_guard, user_not_in_session_guard, valid_session_guard], sync_to_thread=False)
 def session_id(
     request: Request,
     api_key: str,
@@ -110,7 +111,7 @@ def session_id(
     return {"session_id": _session_id}
 
 
-@get("/close_session", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
+@get("/close_session", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
 def close_session(request: Request, api_key: str) -> dict[str, bool]:
     """Close a session out. Will find the latest open session for a user.
 
@@ -119,15 +120,32 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     """
     minio_client = request.app.state.minio_client
     engine = request.app.state.engine
-
     steam_id = steam_id_from_api_key(engine, api_key)
-    msg = close_session_helper(minio_client, engine, steam_id, streaming_sessions)
+
+    msg = close_session_helper(minio_client, engine, steam_id, streaming_sessions, None)
+    logger.info(msg)
+
+    return {"closed_successfully": True}
+
+@post("/close_session", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
+def close_with_late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
+    """Close a session out. Will find the latest open session for a user.
+
+    Returns:
+        {"closed_successfully": True}
+    """
+    minio_client = request.app.state.minio_client
+    engine = request.app.state.engine
+    late_bytes = bytes.fromhex(data.late_bytes)
+    steam_id = steam_id_from_api_key(engine, api_key)
+
+    msg = close_session_helper(minio_client, engine, steam_id, streaming_sessions, late_bytes)
     logger.info(msg)
 
     return {"closed_successfully": True}
 
 
-@post("/late_bytes", guards=[valid_key_guard, user_not_in_session_guard], sync_to_thread=False)
+@post("/late_bytes", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
 def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
     """Add late bytes to a closed demo session.
 
@@ -239,6 +257,11 @@ async def report_player(request: Request, api_key: str, data: ReportBody) -> dic
     except IntegrityError:
         raise HTTPException(detail=f"Unknown session ID {data.session_id}", status_code=402)
 
+@get("/broadcasts", sync_to_thread=False)
+def broadcasts(request: Request) -> list[dict[str, str]]:
+    """Return a list of broadcasts."""
+    engine = request.app.state.engine
+    return get_broadcasts(engine)
 
 class DemoHandler(WebsocketListener):
     """Custom Websocket Class."""
@@ -281,7 +304,11 @@ class DemoHandler(WebsocketListener):
 
     async def on_disconnect(self, socket: WebSocket) -> None:  # type: ignore
         """Close handle on disconnect."""
-        session_manager = streaming_sessions[socket]
+        if socket in streaming_sessions:
+            session_manager = streaming_sessions[socket]
+        else :
+            logger.warning("Attempting to disconnect from already disconnected socket!")
+            return
         logger.info(f"Received socket disconnect from session ID: {session_manager.session_id}")
         session_manager.disconnect()
         await set_open_false(socket.app.state.async_engine, session_manager.session_id)
@@ -440,6 +467,7 @@ app = Litestar(
         landing,
         session_id,
         close_session,
+        close_with_late_bytes,
         DemoHandler,
         provision,
         provision_handler,
@@ -450,6 +478,7 @@ app = Litestar(
         report_player,
         db_export,
         jobs,
+        broadcasts,
         ingest,
     ],
     exception_handlers={Exception: plain_text_exception_handler},
