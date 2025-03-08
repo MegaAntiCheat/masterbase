@@ -19,11 +19,12 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Add pruned column to demo_sessions and default to false"""
+    """Add pruned column to demo_sessions and default to false. Drop blob_name column."""
     op.execute(
         """
         ALTER TABLE demo_sessions
-        ADD COLUMN pruned boolean;
+        ADD COLUMN pruned boolean,
+        DROP COLUMN blob_name;
 
         UPDATE demo_sessions
         SET pruned = false;
@@ -39,21 +40,24 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE TABLE prune_config (
-            min_free_space_gb integer
+            max_storage_gb integer
         );
 
-        INSERT INTO prune_config (min_free_space_gb)
-            VALUES (50)
+        INSERT INTO prune_config (max_storage_gb)
+            VALUES (null);
         """
     )
 
 def downgrade() -> None:
-    """Remove pruned column from demo_sessions"""
+    """Remove pruned column from demo_sessions. Restore blob_name column."""
     op.execute(
         """
         ALTER TABLE demo_sessions
-        DROP COLUMN pruned;
+        DROP COLUMN pruned,
+        ADD COLUMN blob_name text;
 
         DROP TABLE prune_config;
         """
     )
+    # Not guaranteed to work, but should account for normal use cases.
+    op.execute("UPDATE demo_sessions SET blob_name = session_id || '.dem';")

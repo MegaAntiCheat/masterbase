@@ -319,7 +319,6 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
             AND open = false
             AND ingested = false
             AND demo_size > 0
-            AND blob_name IS NOT NULL
         ORDER BY
             created_at ASC
         LIMIT :limit;
@@ -340,7 +339,7 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
 
 def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     """Ingest a demo analysis from an analysis client."""
-    blob_name = f"{session_id}.json"
+    blob_name = json_blob_name(session_id)
     try:
         raw_data = minio_client.get_object("jsonblobs", blob_name).read()
         decoded_data = raw_data.decode("utf-8")
@@ -552,7 +551,6 @@ def _close_session_with_demo(
                 demo_size = :demo_size,
                 markov_score = :markov_score,
                 updated_at = :updated_at,
-                blob_name = :blob_name
                 WHERE
                 steam_id = :steam_id AND
                 session_id = :session_id
@@ -566,7 +564,6 @@ def _close_session_with_demo(
                 "updated_at": current_time.isoformat(),
                 "demo_size": size,
                 "markov_score": markov_score,
-                "blob_name": demo_blob_name(session_id),
             },
         ).scalar_one()
         if late_bytes is not None:
@@ -654,6 +651,9 @@ def demo_blob_name(session_id: str) -> str:
     """Format the object name for a demo blob."""
     return f"{session_id}.dem"
 
+def json_blob_name(session_id: str) -> str:
+    """Format the object name for a json blob."""
+    return f"{session_id}.json"
 
 def demo_sink_path(session_id: str) -> str:
     """Format the media path for a demo blob."""
@@ -891,14 +891,75 @@ def cleanup_hung_sessions(engine: Engine) -> None:
         conn.commit()
 
 # This function is only meant to run on boot!
-def cleanup_orphaned_demos(engine: Engine, minio_client: Minio) -> None:
-    """Remove any orphaned blobs in MinIO that we don't have a session for."""
-    logger.info(f"Checking for orphaned demos.")
+def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
+    """Mark sessions as pruned so the specificed amount of free space is available."""
+
+    current_size = get_total_storage_usage(minio_client)
+
+    with engine.connect() as conn:
+        max_result = conn.execute(
+            sa.text(
+                """
+                SELECT max_storage_gb FROM prune_config;
+                """
+            )
+        )
+        max_size = max_result.scalar_one() * (1024 ** 3)
+        total_bytes_to_remove = current_size - max_size
+        if total_bytes_to_remove <= 0:
+            return False
+
+        # time to prune
+
+        # get the oldest demos that don't have any detections
+        prunable_demos_oldest_first = conn.execute(
+            sa.text(
+                """
+                SELECT (session_id, demo_size) FROM demo_sessions
+                WHERE active = false 
+                AND open = false
+                AND NOT IN (SELECT session_id FROM analysis)
+                ORDER BY created_at ASC
+                """
+            )
+        ).all()
+
+        session_ids_to_remove = {}
+
+        # prune just enough so we're in our space budget
+        for row in prunable_demos_oldest_first:
+            session_id, demo_size = row
+            if demo_size is None: # this should never happen (TODO: handle by prior cleanup)
+                continue
+            session_ids_to_remove[session_id] = demo_size
+
+            if sum(session_ids_to_remove.values()) >= total_bytes_to_remove:
+                break
+
+        # mark as pruned
+        conn.execute(
+            sa.text(
+                """
+                UPDATE demo_sessions
+                SET pruned = true
+                WHERE session_id IN :session_ids_to_remove;
+                """
+            ),
+            {"session_ids_to_remove": session_ids_to_remove}
+        )
+        conn.commit()
+        # pruned demo blobs will be deleted by cleanup_orphaned_demos, which runs after this on boot
+    return True
+
+# This function is only meant to run on boot!
+def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
+    """Remove blobs for pruned or deleted sessions."""
+    logger.info("Checking for orphaned demos.")
     with engine.connect() as conn:
         result = conn.execute(
             sa.text(
                 """
-                SELECT session_id FROM demo_sessions;
+                SELECT session_id FROM demo_sessions WHERE pruned = false;
                 """
             )
         )
@@ -907,22 +968,40 @@ def cleanup_orphaned_demos(engine: Engine, minio_client: Minio) -> None:
         minio_jsonblobs_dict = {blob.object_name: blob for blob in minio_client.list_objects("jsonblobs")}
 
         for session_id in ids_in_db:
-            demo_name = f"{session_id}.dem"
-            demo_json = f"{session_id}.json"
-            if minio_demoblobs_dict.get(demo_name) is not None:
-                minio_demoblobs_dict.pop(demo_name)
-            if minio_jsonblobs_dict.get(demo_json) is not None:
-                minio_jsonblobs_dict.pop(demo_json)
+            demo_blob = demo_blob_name(session_id)
+            json_blob = json_blob_name(session_id)
+            if minio_demoblobs_dict.get(demo_blob) is not None:
+                minio_demoblobs_dict.pop(demo_blob)
+            if minio_jsonblobs_dict.get(json_blob) is not None:
+                minio_jsonblobs_dict.pop(json_blob)
 
         # dicts now contain only orphaned blobs
+
+        # If we're gonna wipe more than this % of the blobs, something is probably very wrong.
+        max_cleanup_ratio = 0.05
+        if len(minio_demoblobs_dict) > ids_in_db * max_cleanup_ratio:
+            logger.warning("Too many orphaned demo blobs found, refusing to clean up because something probably broke.")
+            return
+
         for blob in minio_demoblobs_dict.values():
-            logger.info(f"Removing orphaned demo {blob.object_name}")
+            logger.info("Removing orphaned demo %s", blob.object_name)
             minio_client.remove_object("demoblobs", blob.object_name)
         for blob in minio_jsonblobs_dict.values():
-            logger.info(f"Removing orphaned json {blob.object_name}")
+            logger.info("Removing orphaned json %s", blob.object_name)
             minio_client.remove_object("jsonblobs", blob.object_name)
 
-# This function is only meant to run on boot!
-def prune_if_necessary(engine: Engine) -> None:
-    """Prune the database so the specificed amount of free space is available."""
-    pass
+def get_total_storage_usage(minio_client: Minio) -> int:
+    """Get the total storage used by all buckets in bytes."""
+    try:
+        buckets = minio_client.list_buckets()
+        total_size = 0
+
+        for bucket in buckets:
+            objects = minio_client.list_objects(bucket.name, recursive=True)
+            bucket_size = sum(obj.size for obj in objects)
+            total_size += bucket_size
+
+        return total_size
+    except S3Error as exc:
+        print("Error occurred:", exc)
+        return -1
