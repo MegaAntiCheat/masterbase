@@ -873,3 +873,56 @@ def get_broadcasts(engine: Engine) -> list[dict[str, str]]:
         for row in rows:
             row["post_date"] = row.pop("created_at")
         return rows
+
+# This function is only meant to run on boot!
+def cleanup_hung_sessions(engine: Engine) -> None:
+    """Remove any sessions that were left open/active after shutdown."""
+    logger.info(f"Checking for hanging sessions.")
+    with engine.connect() as conn:
+        conn.execute(
+            sa.text(
+                """
+                DELETE FROM demo_sessions
+                WHERE active = true
+                OR open = true;
+                """
+            )
+        )
+        conn.commit()
+
+# This function is only meant to run on boot!
+def cleanup_orphaned_demos(engine: Engine, minio_client: Minio) -> None:
+    """Remove any orphaned blobs in MinIO that we don't have a session for."""
+    logger.info(f"Checking for orphaned demos.")
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text(
+                """
+                SELECT session_id FROM demo_sessions;
+                """
+            )
+        )
+        ids_in_db = [row[0] for row in result.all()]
+        minio_demoblobs_dict = {blob.object_name: blob for blob in minio_client.list_objects("demoblobs")}
+        minio_jsonblobs_dict = {blob.object_name: blob for blob in minio_client.list_objects("jsonblobs")}
+
+        for session_id in ids_in_db:
+            demo_name = f"{session_id}.dem"
+            demo_json = f"{session_id}.json"
+            if minio_demoblobs_dict.get(demo_name) is not None:
+                minio_demoblobs_dict.pop(demo_name)
+            if minio_jsonblobs_dict.get(demo_json) is not None:
+                minio_jsonblobs_dict.pop(demo_json)
+
+        # dicts now contain only orphaned blobs
+        for blob in minio_demoblobs_dict.values():
+            logger.info(f"Removing orphaned demo {blob.object_name}")
+            minio_client.remove_object("demoblobs", blob.object_name)
+        for blob in minio_jsonblobs_dict.values():
+            logger.info(f"Removing orphaned json {blob.object_name}")
+            minio_client.remove_object("jsonblobs", blob.object_name)
+
+# This function is only meant to run on boot!
+def prune_if_necessary(engine: Engine) -> None:
+    """Prune the database so the specificed amount of free space is available."""
+    pass
