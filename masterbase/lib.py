@@ -904,9 +904,12 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
                 """
             )
         )
-        max_size = max_result.scalar_one() * (1024 ** 3)
+        max_size_gb = max_result.scalar_one()
+        if max_size_gb is None:
+            return False
+        max_size = max_size_gb * (1024 ** 3)
         total_bytes_to_remove = current_size - max_size
-        if total_bytes_to_remove <= 0:
+        if max_size == 0 or total_bytes_to_remove <= 0:
             return False
 
         # time to prune
@@ -979,7 +982,7 @@ def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
 
         # If we're gonna wipe more than this % of the blobs, something is probably very wrong.
         max_cleanup_ratio = 0.05
-        if len(minio_demoblobs_dict) > ids_in_db * max_cleanup_ratio:
+        if len(minio_demoblobs_dict) > len(ids_in_db) * max_cleanup_ratio:
             logger.warning("Too many orphaned demo blobs found, refusing to clean up because something probably broke.")
             return
 
