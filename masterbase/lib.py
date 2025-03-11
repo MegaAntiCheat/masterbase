@@ -550,7 +550,7 @@ def _close_session_with_demo(
                 end_time = :end_time,
                 demo_size = :demo_size,
                 markov_score = :markov_score,
-                updated_at = :updated_at,
+                updated_at = :updated_at
                 WHERE
                 steam_id = :steam_id AND
                 session_id = :session_id
@@ -913,22 +913,22 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
             return False
         max_size = max_size_gb * (1024 ** 3)
         total_bytes_to_remove = current_size - max_size
-        logger.info("Current size: %d; Max size: %d; Bytes to remove: %d", current_size, max_size, total_bytes_to_remove)
+        logger.info("Current size: %d MB; Max size: %d MB", current_size / (1024 ** 2), max_size / (1024 ** 2))
         if total_bytes_to_remove <= 0:
             logger.info("No need to prune.")
             return False
 
-        logger.info("Going to prune.")
+        logger.info("Attempting to prune %d MB", max(0, total_bytes_to_remove / (1024 ** 2)))
 
         # get the oldest demos that don't have any detections
         prunable_demos_oldest_first = conn.execute(
             sa.text(
                 """
-                SELECT (session_id, demo_size) FROM demo_sessions
+                SELECT session_id, demo_size FROM demo_sessions
                 WHERE active = false 
                 AND open = false
                 AND pruned = false
-                AND NOT IN (SELECT session_id FROM analysis)
+                AND session_id NOT IN (SELECT session_id FROM analysis)
                 ORDER BY created_at ASC
                 """
             )
@@ -946,6 +946,8 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
             if sum(session_ids_to_remove.values()) >= total_bytes_to_remove:
                 break
 
+        session_ids_to_remove = list(session_ids_to_remove.keys())
+
         # mark as pruned
         conn.execute(
             sa.text(
@@ -955,10 +957,10 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
                 WHERE session_id IN :session_ids_to_remove;
                 """
             ),
-            {"session_ids_to_remove": session_ids_to_remove}
+            {"session_ids_to_remove": tuple(session_ids_to_remove)}
         )
         conn.commit()
-        logger.info("Marking %d demos for pruning.", len(session_ids_to_remove))
+        logger.info("Marked %d demos for pruning.", len(session_ids_to_remove))
         # pruned demo blobs will be deleted by cleanup_orphaned_demos, which runs after this on boot
     return True
 

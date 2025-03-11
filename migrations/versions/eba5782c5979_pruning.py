@@ -40,11 +40,11 @@ def upgrade() -> None:
     op.execute(
         """
         CREATE TABLE prune_config (
-            max_storage_gb integer
+            max_storage_gb integer PRIMARY KEY DEFAULT 0
         );
 
         INSERT INTO prune_config (max_storage_gb)
-            VALUES (null);
+            VALUES (DEFAULT);
         """
     )
 
