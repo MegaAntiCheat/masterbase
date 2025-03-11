@@ -877,23 +877,26 @@ def get_broadcasts(engine: Engine) -> list[dict[str, str]]:
 # This function is only meant to run on boot!
 def cleanup_hung_sessions(engine: Engine) -> None:
     """Remove any sessions that were left open/active after shutdown."""
-    logger.info(f"Checking for hanging sessions.")
+    logger.info(f"Checking for hanging sessions...")
     with engine.connect() as conn:
-        conn.execute(
+        result = conn.execute(
             sa.text(
                 """
                 DELETE FROM demo_sessions
                 WHERE active = true
-                OR open = true;
+                OR open = true
+                OR demo_size IS NULL;
                 """
             )
         )
+        deleted_rows = result.rowcount
         conn.commit()
+        logger.info("Deleted %d hanging sessions.", deleted_rows)
 
 # This function is only meant to run on boot!
 def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
     """Mark sessions as pruned so the specificed amount of free space is available."""
-
+    logger.info(f"Checking if we need to prune demos...")
     current_size = get_total_storage_usage(minio_client)
 
     with engine.connect() as conn:
@@ -905,14 +908,17 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
             )
         )
         max_size_gb = max_result.scalar_one()
-        if max_size_gb is None:
+        if max_size_gb is None or max_size_gb <= 0:
+            logger.warning("No storage limit set, enjoy filling your disk!")
             return False
         max_size = max_size_gb * (1024 ** 3)
         total_bytes_to_remove = current_size - max_size
-        if max_size == 0 or total_bytes_to_remove <= 0:
+        logger.info("Current size: %d; Max size: %d; Bytes to remove: %d", current_size, max_size, total_bytes_to_remove)
+        if total_bytes_to_remove <= 0:
+            logger.info("No need to prune.")
             return False
 
-        # time to prune
+        logger.info("Going to prune.")
 
         # get the oldest demos that don't have any detections
         prunable_demos_oldest_first = conn.execute(
@@ -921,6 +927,7 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
                 SELECT (session_id, demo_size) FROM demo_sessions
                 WHERE active = false 
                 AND open = false
+                AND pruned = false
                 AND NOT IN (SELECT session_id FROM analysis)
                 ORDER BY created_at ASC
                 """
@@ -951,6 +958,7 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
             {"session_ids_to_remove": session_ids_to_remove}
         )
         conn.commit()
+        logger.info("Marking %d demos for pruning.", len(session_ids_to_remove))
         # pruned demo blobs will be deleted by cleanup_orphaned_demos, which runs after this on boot
     return True
 
