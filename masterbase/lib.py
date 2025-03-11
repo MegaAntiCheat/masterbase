@@ -319,6 +319,7 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
             active = false
             AND open = false
             AND ingested = false
+            AND pruned = false
             AND demo_size > 0
         ORDER BY
             created_at ASC

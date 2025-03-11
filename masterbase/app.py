@@ -200,8 +200,12 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     """Return the demo."""
     minio_client = request.app.state.minio_client
     blob_name = demo_blob_name(session_id)
-    file = minio_client.get_object("demoblobs", blob_name)
-    stat = minio_client.stat_object("demoblobs", blob_name)
+
+    try:
+        file = minio_client.get_object("demoblobs", blob_name)
+        stat = minio_client.stat_object("demoblobs", blob_name)
+    except Exception as exc:
+        raise HTTPException(detail="Demo not found!", status_code=404) from exc
 
     headers = {
         "Content-Disposition": f'attachment; filename="{blob_name}"',
