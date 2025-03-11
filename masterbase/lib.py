@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import logging
+import math
 import os
 import secrets
 import socket
@@ -921,32 +922,40 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
         logger.info("Attempting to prune %d MB", max(0, total_bytes_to_remove / (1024 ** 2)))
 
         # get the oldest demos that don't have any detections
-        prunable_demos_oldest_first = conn.execute(
+        # we allow demos that have already been pruned in case we somehow end up in a state
+        # where a demo is marked as pruned but its blob remains.
+        result = conn.execute(
             sa.text(
                 """
-                SELECT session_id, demo_size FROM demo_sessions
+                SELECT session_id FROM demo_sessions
                 WHERE active = false 
                 AND open = false
-                AND pruned = false
                 AND session_id NOT IN (SELECT session_id FROM analysis)
                 ORDER BY created_at ASC
                 """
             )
-        ).all()
+        )
 
-        session_ids_to_remove = {}
+        prunable_demos_oldest_first = [row[0] for row in result.all()]
+
+        minio_demoblobs_dict = {blob.object_name: blob for blob in minio_client.list_objects("demoblobs")}
+        session_ids_to_remove = []
+        bytes_saved = 0
 
         # prune just enough so we're in our space budget
-        for row in prunable_demos_oldest_first:
-            session_id, demo_size = row
-            if demo_size is None: # this should never happen (TODO: handle by prior cleanup)
+        for session_id in prunable_demos_oldest_first:
+            blob = minio_demoblobs_dict.get(demo_blob_name(session_id))
+            if blob is None:
+                # already pruned, do not count
                 continue
-            session_ids_to_remove[session_id] = demo_size
-
-            if sum(session_ids_to_remove.values()) >= total_bytes_to_remove:
+            session_ids_to_remove.append(session_id)
+            bytes_saved += blob.size
+            if bytes_saved >= total_bytes_to_remove:
                 break
 
-        session_ids_to_remove = list(session_ids_to_remove.keys())
+        if len(session_ids_to_remove) == 0:
+            logger.warning("No demos to prune, but we're over the limit!")
+            return False
 
         # mark as pruned
         conn.execute(
@@ -990,11 +999,38 @@ def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
 
         # dicts now contain only orphaned blobs
 
-        # If we're gonna wipe more than this % of the blobs, something is probably very wrong.
-        max_cleanup_ratio = 0.05
-        if len(minio_demoblobs_dict) > len(ids_in_db) * max_cleanup_ratio:
-            logger.warning("Too many orphaned demo blobs found, refusing to clean up because something probably broke.")
+        ratio_result = conn.execute(
+            sa.text(
+                """
+                SELECT max_prune_ratio FROM prune_config;
+                """
+            )
+        )
+        # If we're gonna wipe more than max_prune_ratio (default 0.05) of the blobs, something is probably very wrong.
+        # Setting this to negative will perform a one-time prune regardless of ratio.
+        max_prune_ratio = ratio_result.scalar_one()
+        if len(minio_demoblobs_dict) > len(ids_in_db) * max_prune_ratio and max_prune_ratio >= 0:
+            logger.warning("Too many orphaned demo blobs: %d (%f%%) found, but limit set to %d (%f%%). Refusing to clean up because something probably broke.",
+                len(minio_demoblobs_dict),
+                len(minio_demoblobs_dict) / len(ids_in_db) * 100,
+                math.floor(len(ids_in_db) * max_prune_ratio),
+                max_prune_ratio * 100
+            )
             return
+
+        if max_prune_ratio < 0:
+            max_prune_ratio = abs(max_prune_ratio)
+            logger.info("Orphaned demo cleanup forced by config. Setting back to %f", max_prune_ratio)
+            conn.execute(
+                sa.text(
+                    """
+                    UPDATE prune_config
+                    SET max_prune_ratio = :max_prune_ratio;
+                    """
+                ),
+                {"max_prune_ratio": max_prune_ratio}
+            )
+            conn.commit()
 
         for blob in minio_demoblobs_dict.values():
             logger.info("Removing orphaned demo %s", blob.object_name)
