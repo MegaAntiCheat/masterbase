@@ -882,8 +882,15 @@ def cleanup_hung_sessions(engine: Engine) -> None:
     logger.info(f"Checking for hanging sessions...")
     with engine.connect() as conn:
         result = conn.execute(
-            sa.text(
+            sa.text( # We have to delete reports first because of the REFERENCES constraint
                 """
+                DELETE FROM reports WHERE session_id IN (
+                    SELECT session_id FROM demo_sessions
+                    WHERE active = true
+                    OR open = true
+                    OR demo_size IS NULL
+                );
+                
                 DELETE FROM demo_sessions
                 WHERE active = true
                 OR open = true
