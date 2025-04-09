@@ -23,6 +23,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(CURRENT_DIR))
 
 # ruff: noqa: E402
+# ruff: noqa: I001
 from masterbase.anomaly import DetectionState
 from masterbase.guards import (
     analyst_guard,
@@ -46,7 +47,6 @@ from masterbase.lib import (
     close_session_helper,
     db_export_chunks,
     demo_blob_name,
-    json_blob_name,
     generate_api_key,
     generate_uuid4_int,
     get_broadcasts,
@@ -65,6 +65,8 @@ from masterbase.lib import (
 from masterbase.models import ExportTable, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
+
+# ruff: enable
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +129,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     logger.info(msg)
 
     return {"closed_successfully": True}
+
 
 @post("/close_session", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
 def close_with_late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
@@ -262,11 +265,13 @@ async def report_player(request: Request, api_key: str, data: ReportBody) -> dic
     except IntegrityError:
         raise HTTPException(detail=f"Unknown session ID {data.session_id}", status_code=402)
 
+
 @get("/broadcasts", sync_to_thread=False)
 def broadcasts(request: Request) -> list[dict[str, str]]:
     """Return a list of broadcasts."""
     engine = request.app.state.engine
     return get_broadcasts(engine)
+
 
 class DemoHandler(WebsocketListener):
     """Custom Websocket Class."""
@@ -311,7 +316,7 @@ class DemoHandler(WebsocketListener):
         """Close handle on disconnect."""
         if socket in streaming_sessions:
             session_manager = streaming_sessions[socket]
-        else :
+        else:
             logger.warning("Attempting to disconnect from already disconnected socket!")
             return
         logger.info(f"Received socket disconnect from session ID: {session_manager.session_id}")

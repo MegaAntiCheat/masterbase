@@ -8,11 +8,11 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.lib import (
-    make_db_uri,
-    make_minio_client,
     cleanup_hung_sessions,
     cleanup_pruned_demos,
-    prune_if_necessary
+    make_db_uri,
+    make_minio_client,
+    prune_if_necessary,
 )
 
 
@@ -60,6 +60,7 @@ async def close_async_db_connection(app: Litestar) -> None:
     if getattr(app.state, "async_engine", None):
         await cast("AsyncEngine", app.state.async_engine).dispose()
 
+
 def boot_cleanup(app: Litestar) -> None:
     """Cleanup the database on boot."""
     engine = app.state.engine
@@ -68,6 +69,7 @@ def boot_cleanup(app: Litestar) -> None:
     cleanup_hung_sessions(engine)
     prune_if_necessary(engine, minio_client)
     cleanup_pruned_demos(engine, minio_client)
+
 
 startup_registers = (get_db_connection, get_async_db_connection, get_minio_connection, boot_cleanup)
 shutdown_registers = (close_db_connection, close_async_db_connection)

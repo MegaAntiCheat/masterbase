@@ -589,9 +589,8 @@ def close_session_helper(
     minio_client: Minio,
     engine: Engine,
     steam_id: str,
-    streaming_sessions:
-    SocketManagerMapType,
-    late_bytes: bytes | None
+    streaming_sessions: SocketManagerMapType,
+    late_bytes: bytes | None,
 ) -> str:
     """Properly close a session and return a summary message.
 
@@ -653,9 +652,11 @@ def demo_blob_name(session_id: str) -> str:
     """Format the object name for a demo blob."""
     return f"{session_id}.dem"
 
+
 def json_blob_name(session_id: str) -> str:
     """Format the object name for a json blob."""
     return f"{session_id}.json"
+
 
 def demo_sink_path(session_id: str) -> str:
     """Format the media path for a demo blob."""
@@ -865,24 +866,24 @@ def check_is_loser(engine: Engine, steam_id: str) -> bool:
 
         return bool(result)
 
+
 def get_broadcasts(engine: Engine) -> list[dict[str, str]]:
     """Get the list of broadcasts."""
     with engine.connect() as conn:
-        result = conn.execute(
-           sa.text("SELECT * FROM broadcasts")
-        )
+        result = conn.execute(sa.text("SELECT * FROM broadcasts"))
         rows = [row._asdict() for row in result.all()]
         for row in rows:
             row["post_date"] = row.pop("created_at")
         return rows
 
+
 # This function is only meant to run on boot!
 def cleanup_hung_sessions(engine: Engine) -> None:
     """Remove any sessions that were left open/active after shutdown."""
-    logger.info(f"Checking for hanging sessions...")
+    logger.info("Checking for hanging sessions...")
     with engine.connect() as conn:
         result = conn.execute(
-            sa.text( # We have to delete reports first because of the REFERENCES constraint
+            sa.text(  # We have to delete reports first because of the REFERENCES constraint
                 """
                 DELETE FROM reports WHERE session_id IN (
                     SELECT session_id FROM demo_sessions
@@ -890,7 +891,7 @@ def cleanup_hung_sessions(engine: Engine) -> None:
                     OR open = true
                     OR demo_size IS NULL
                 );
-                
+
                 DELETE FROM demo_sessions
                 WHERE active = true
                 OR open = true
@@ -902,10 +903,11 @@ def cleanup_hung_sessions(engine: Engine) -> None:
         conn.commit()
         logger.info("Deleted %d hanging sessions.", deleted_rows)
 
+
 # This function is only meant to run on boot!
 def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
     """Mark sessions as pruned so the specificed amount of free space is available."""
-    logger.info(f"Checking if we need to prune demos...")
+    logger.info("Checking if we need to prune demos...")
     current_size = get_total_storage_usage(minio_client)
 
     with engine.connect() as conn:
@@ -920,14 +922,14 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
         if max_size_gb is None or max_size_gb <= 0:
             logger.warning("No storage limit set, enjoy filling your disk!")
             return False
-        max_size = max_size_gb * (1024 ** 3)
+        max_size = max_size_gb * (1024**3)
         total_bytes_to_remove = current_size - max_size
-        logger.info("Current size: %d MB; Max size: %d MB", current_size / (1024 ** 2), max_size / (1024 ** 2))
+        logger.info("Current size: %d MB; Max size: %d MB", current_size / (1024**2), max_size / (1024**2))
         if total_bytes_to_remove <= 0:
             logger.info("No need to prune.")
             return False
 
-        logger.info("Attempting to prune %d MB", max(0, total_bytes_to_remove / (1024 ** 2)))
+        logger.info("Attempting to prune %d MB", max(0, total_bytes_to_remove / (1024**2)))
 
         # get the oldest demos that don't have any detections
         # we allow demos that have already been pruned in case we somehow end up in a state
@@ -936,7 +938,7 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
             sa.text(
                 """
                 SELECT session_id FROM demo_sessions
-                WHERE active = false 
+                WHERE active = false
                 AND open = false
                 AND session_id NOT IN (SELECT session_id FROM analysis)
                 ORDER BY created_at ASC
@@ -974,12 +976,13 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
                 WHERE session_id IN :session_ids_to_remove;
                 """
             ),
-            {"session_ids_to_remove": tuple(session_ids_to_remove)}
+            {"session_ids_to_remove": tuple(session_ids_to_remove)},
         )
         conn.commit()
         logger.info("Marked %d demos for pruning.", len(session_ids_to_remove))
         # pruned demo blobs will be deleted by cleanup_orphaned_demos, which runs after this on boot
     return True
+
 
 # This function is only meant to run on boot!
 def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
@@ -1018,11 +1021,13 @@ def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
         # Setting this to negative will perform a one-time prune regardless of ratio.
         max_prune_ratio = ratio_result.scalar_one()
         if len(minio_demoblobs_dict) > len(ids_in_db) * max_prune_ratio and max_prune_ratio >= 0:
-            logger.warning("Too many orphaned demo blobs: %d (%f%%) found, but limit set to %d (%f%%). Refusing to clean up because something probably broke.",
+            logger.warning(
+                "Too many orphaned demo blobs: %d (%f%%) found, but limit set to %d (%f%%). "
+                "Refusing to clean up because something probably broke.",
                 len(minio_demoblobs_dict),
                 len(minio_demoblobs_dict) / len(ids_in_db) * 100,
                 math.floor(len(ids_in_db) * max_prune_ratio),
-                max_prune_ratio * 100
+                max_prune_ratio * 100,
             )
             return
 
@@ -1036,7 +1041,7 @@ def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
                     SET max_prune_ratio = :max_prune_ratio;
                     """
                 ),
-                {"max_prune_ratio": max_prune_ratio}
+                {"max_prune_ratio": max_prune_ratio},
             )
             conn.commit()
 
@@ -1046,6 +1051,7 @@ def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
         for blob in minio_jsonblobs_dict.values():
             logger.info("Removing orphaned json %s", blob.object_name)
             minio_client.remove_object("jsonblobs", blob.object_name)
+
 
 def get_total_storage_usage(minio_client: Minio) -> int:
     """Get the total storage used by all buckets in bytes."""
