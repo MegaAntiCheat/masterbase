@@ -51,7 +51,7 @@ from masterbase.lib import (
     generate_uuid4_int,
     get_broadcasts,
     get_uningested_demos,
-    ingest_demo,
+    ingest_demos,
     late_bytes_helper,
     list_demos_helper,
     provision_api_key,
@@ -62,7 +62,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
-from masterbase.models import ExportTable, LateBytesBody, ReportBody
+from masterbase.models import ExportTable, LateBytesBody, MarkIngestedBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -76,13 +76,13 @@ streaming_sessions: SocketManagerMapType = {}
 
 
 @get("/", sync_to_thread=False)
-def landing() -> Redirect:
+async def landing() -> Redirect:
     """Redirect to github page."""
     return Redirect(path="https://github.com/MegaAntiCheat/client-backend")
 
 
 @get("/session_id", guards=[valid_key_guard, user_not_in_session_guard, valid_session_guard], sync_to_thread=False)
-def session_id(
+async def session_id(
     request: Request,
     api_key: str,
     demo_name: str,
@@ -132,7 +132,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
 
 
 @post("/close_session", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
-def close_with_late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
+async def close_with_late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
     """Close a session out. Will find the latest open session for a user.
 
     Returns:
@@ -150,7 +150,7 @@ def close_with_late_bytes(request: Request, api_key: str, data: LateBytesBody) -
 
 
 @post("/late_bytes", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
-def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
+async def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
     """Add late bytes to a closed demo session.
 
     Returns:
@@ -171,7 +171,7 @@ def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str,
 
 
 @get("/analyst_list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def analyst_list_demos(
+async def analyst_list_demos(
     request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
 ) -> list[dict[str, str]]:
     """List all demo data."""
@@ -185,7 +185,7 @@ def analyst_list_demos(
 
 
 @get("/list_demos", guards=[valid_key_guard], sync_to_thread=False)
-def list_demos(
+async def list_demos(
     request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
 ) -> list[dict[str, str]]:
     """List demo data for user with `api_key`."""
@@ -233,7 +233,7 @@ def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
 
 
 @get("/jobs", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
+async def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
     """Return a list of demos that need analysis."""
     engine = request.app.state.engine
     demos = get_uningested_demos(engine, limit)
@@ -242,10 +242,10 @@ def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
 
 
 @post("/ingest", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
-def ingest(request: Request, api_key: str, session_id: str) -> dict[str, bool]:
+async def ingest(request: Request, api_key: str, data: MarkIngestedBody) -> dict[str, bool]:
     """Report analysis as completed, ingest into database."""
     minio_client = request.app.state.minio_client
-    err = ingest_demo(minio_client, request.app.state.engine, session_id)
+    err = ingest_demos(minio_client, request.app.state.engine, data.session_ids)
     if err is None:
         return {"ingested": True}
     raise HTTPException(detail=f"Internal Error Occured: {err}", status_code=500)
@@ -266,8 +266,8 @@ async def report_player(request: Request, api_key: str, data: ReportBody) -> dic
         raise HTTPException(detail=f"Unknown session ID {data.session_id}", status_code=402)
 
 
-@get("/broadcasts", sync_to_thread=False)
-def broadcasts(request: Request) -> list[dict[str, str]]:
+@get("/broadcasts")
+async def broadcasts(request: Request) -> list[dict[str, str]]:
     """Return a list of broadcasts."""
     engine = request.app.state.engine
     return get_broadcasts(engine)

@@ -338,6 +338,17 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
 
         return uningested_demos
 
+def ingest_demos(minio_client: Minio, engine: Engine, session_ids: list[str]):
+    """Ingest a list of demos from an analysis client."""
+    errors = []
+    for session_id in session_ids:
+        error = ingest_demo(minio_client, engine, session_id)
+        if error is not None:
+            errors.append(error)
+
+    if errors:
+        return "Errors occurred during ingestion: " + ", ".join(errors)
+    return None
 
 def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
     """Ingest a demo analysis from an analysis client."""

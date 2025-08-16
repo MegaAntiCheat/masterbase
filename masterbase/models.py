@@ -51,3 +51,8 @@ class LateBytesBody(BaseModel):
     """Report model for late_bytes post request body."""
 
     late_bytes: str
+
+class MarkIngestedBody(BaseModel):
+    """Model for ingest post request body."""
+
+    session_ids: list[str]
