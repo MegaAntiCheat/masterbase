@@ -338,19 +338,15 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
 
         return uningested_demos
 
-def ingest_demos(minio_client: Minio, engine: Engine, session_ids: list[str]):
+def ingest_demos(minio_client: Minio, engine: Engine, session_ids: list[str]) -> dict[str, str | None]:
     """Ingest a list of demos from an analysis client."""
-    errors = []
+    errors = dict[str, str | None]()
     for session_id in session_ids:
         error = ingest_demo(minio_client, engine, session_id)
-        if error is not None:
-            errors.append(error)
+        errors[session_id] = error
+    return errors
 
-    if errors:
-        return "Errors occurred during ingestion: " + ", ".join(errors)
-    return None
-
-def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
+def ingest_demo(minio_client: Minio, engine: Engine, session_id: str) -> str | None:
     """Ingest a demo analysis from an analysis client."""
     blob_name = json_blob_name(session_id)
     try:
@@ -360,11 +356,15 @@ def ingest_demo(minio_client: Minio, engine: Engine, session_id: str):
         data = Analysis.parse_obj(json_data)
     except S3Error as err:
         if err.code == "NoSuchKey":
-            return "no analysis data found."
+            return "No analysis blob was found."
         else:
-            return "unknown S3 error while looking up analysis data."
+            return "Unexpected S3 error while looking up analysis data: " + str(err)
     except ValidationError:
-        return "malformed analysis data."
+        return "Analysis data does not conform to schema."
+    except json.JSONDecodeError:
+        return "Malformed JSON data in analysis blob."
+    except Exception as err:
+        return "Unexpected error while decoding analysis data: " + str(err)
 
     # Data preprocessing
     algorithm_counts = {}

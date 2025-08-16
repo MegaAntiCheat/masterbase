@@ -245,10 +245,11 @@ async def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
 async def ingest(request: Request, api_key: str, data: MarkIngestedBody) -> dict[str, bool]:
     """Report analysis as completed, ingest into database."""
     minio_client = request.app.state.minio_client
-    err = ingest_demos(minio_client, request.app.state.engine, data.session_ids)
-    if err is None:
-        return {"ingested": True}
-    raise HTTPException(detail=f"Internal Error Occured: {err}", status_code=500)
+    errors = ingest_demos(minio_client, request.app.state.engine, data.session_ids)
+    
+    return [
+        {"session_id": session_id, "ingested": not bool(error)} for session_id, error in zip(data.session_ids, errors)
+    ]
 
 
 @post("/report", guards=[valid_key_guard])
