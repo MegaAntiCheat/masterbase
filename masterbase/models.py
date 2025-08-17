@@ -39,7 +39,6 @@ class Analysis(BaseModel):
     map: str
     server_ip: str
 
-
 class ExportTable(str, Enum):
     """Tables to be allowed in database exports."""
 
