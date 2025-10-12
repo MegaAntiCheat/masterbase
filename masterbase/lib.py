@@ -358,7 +358,6 @@ def ingest_demos(minio_client: Minio, engine: Engine, session_ids: list[str]) ->
     # SQL query to wipe existing analysis data
     # (we want to be able to reingest a demo if necessary by manually setting ingested = false)
     wipe_analysis_sql = "DELETE FROM analysis WHERE session_id = ANY(:session_ids);"
-    wipe_reviews_sql = "DELETE FROM reviews WHERE session_id = ANY(:session_ids);"
 
     # SQL query to insert the analysis data
     insert_sql = """\
@@ -405,10 +404,6 @@ def ingest_demos(minio_client: Minio, engine: Engine, session_ids: list[str]) ->
             result_list = list(results.keys())
             conn.execute(
                 sa.text(wipe_analysis_sql),
-                {"session_ids": result_list},
-            )
-            conn.execute(
-                sa.text(wipe_reviews_sql),
                 {"session_ids": result_list},
             )
 
