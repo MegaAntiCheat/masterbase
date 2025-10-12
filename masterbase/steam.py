@@ -12,7 +12,6 @@ from pydantic import BaseModel
 
 STEAM_API_KEY_KEYNAME = "STEAM_API_KEY"
 
-
 def get_steam_api_key(path_or_env_var_name: str | None = STEAM_API_KEY_KEYNAME) -> str:
     """Get a steam API key from a toml, json, or environment variable.
 
@@ -30,6 +29,7 @@ def get_steam_api_key(path_or_env_var_name: str | None = STEAM_API_KEY_KEYNAME) 
         # attempt to load from json or toml file
         if os.path.isfile(path_or_env_var_name):
             with open(path_or_env_var_name, "r") as f:
+                data = None
                 if path_or_env_var_name.endswith(".toml"):
                     data = toml.loads(f.read())
 

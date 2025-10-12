@@ -8,10 +8,12 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.lib import (
-    cleanup_hung_sessions,
-    cleanup_pruned_demos,
     make_db_uri,
     make_minio_client,
+)
+from masterbase.pruning import (
+    cleanup_hung_sessions,
+    cleanup_pruned_demos,
     prune_if_necessary,
 )
 

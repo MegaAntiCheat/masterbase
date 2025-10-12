@@ -22,8 +22,7 @@ from sqlalchemy.exc import IntegrityError
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(CURRENT_DIR))
 
-# ruff: noqa: E402
-# ruff: noqa: I001
+from masterbase.analysis import get_uningested_demos, ingest_demos
 from masterbase.anomaly import DetectionState
 from masterbase.guards import (
     analyst_guard,
@@ -50,8 +49,6 @@ from masterbase.lib import (
     generate_api_key,
     generate_uuid4_int,
     get_broadcasts,
-    get_uningested_demos,
-    ingest_demos,
     late_bytes_helper,
     list_demos_helper,
     provision_api_key,
@@ -75,13 +72,13 @@ logger = logging.getLogger(__name__)
 streaming_sessions: SocketManagerMapType = {}
 
 
-@get("/", sync_to_thread=False)
+@get("/")
 async def landing() -> Redirect:
     """Redirect to github page."""
     return Redirect(path="https://github.com/MegaAntiCheat/client-backend")
 
 
-@get("/session_id", guards=[valid_key_guard, user_not_in_session_guard, valid_session_guard], sync_to_thread=False)
+@get("/session_id", guards=[valid_key_guard, user_not_in_session_guard, valid_session_guard])
 async def session_id(
     request: Request,
     api_key: str,
@@ -131,7 +128,7 @@ def close_session(request: Request, api_key: str) -> dict[str, bool]:
     return {"closed_successfully": True}
 
 
-@post("/close_session", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
+@post("/close_session", guards=[valid_key_guard, user_in_session_guard])
 async def close_with_late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
     """Close a session out. Will find the latest open session for a user.
 
@@ -149,7 +146,7 @@ async def close_with_late_bytes(request: Request, api_key: str, data: LateBytesB
     return {"closed_successfully": True}
 
 
-@post("/late_bytes", guards=[valid_key_guard, user_in_session_guard], sync_to_thread=False)
+@post("/late_bytes", guards=[valid_key_guard, user_in_session_guard])
 async def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dict[str, bool]:
     """Add late bytes to a closed demo session.
 
@@ -170,7 +167,7 @@ async def late_bytes(request: Request, api_key: str, data: LateBytesBody) -> dic
         raise HTTPException(detail=error, status_code=422, extra={"late_bytes": False})
 
 
-@get("/analyst_list_demos", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+@get("/analyst_list_demos", guards=[valid_key_guard, analyst_guard])
 async def analyst_list_demos(
     request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
 ) -> list[dict[str, str]]:
@@ -184,7 +181,7 @@ async def analyst_list_demos(
     return demos
 
 
-@get("/list_demos", guards=[valid_key_guard], sync_to_thread=False)
+@get("/list_demos", guards=[valid_key_guard])
 async def list_demos(
     request: Request, api_key: str, page_size: int | None = None, page_number: int | None = None
 ) -> list[dict[str, str]]:
@@ -232,7 +229,7 @@ def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
     )
 
 
-@get("/jobs", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+@get("/jobs", guards=[valid_key_guard, analyst_guard])
 async def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
     """Return a list of demos that need analysis."""
     engine = request.app.state.engine
@@ -241,7 +238,7 @@ async def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
     return demos
 
 
-@post("/ingest", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
+@post("/ingest", guards=[valid_key_guard, analyst_guard])
 async def ingest(request: Request, api_key: str, data: MarkIngestedBody) -> dict[str, bool]:
     """Report analysis as completed, ingest into database."""
     minio_client = request.app.state.minio_client
