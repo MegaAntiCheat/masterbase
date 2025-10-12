@@ -47,11 +47,11 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
         max_result = conn.execute(
             sa.text(
                 """
-                SELECT max_storage_gb FROM prune_config;
+                SELECT value from config WHERE setting = 'max_storage_gb';
                 """
             )
         )
-        max_size_gb = max_result.scalar_one()
+        max_size_gb = int(max_result.scalar_one())
         if max_size_gb is None or max_size_gb <= 0:
             logger.warning("No storage limit set, enjoy filling your disk!")
             return False
@@ -146,13 +146,13 @@ def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
         ratio_result = conn.execute(
             sa.text(
                 """
-                SELECT max_prune_ratio FROM prune_config;
+                SELECT value from config WHERE setting = 'max_prune_ratio';
                 """
             )
         )
         # If we're gonna wipe more than max_prune_ratio (default 0.05) of the blobs, something is probably very wrong.
         # Setting this to negative will perform a one-time prune regardless of ratio.
-        max_prune_ratio = ratio_result.scalar_one()
+        max_prune_ratio = float(ratio_result.scalar_one())
         if len(minio_demoblobs_dict) > len(ids_in_db) * max_prune_ratio and max_prune_ratio >= 0:
             logger.warning(
                 "Too many orphaned demo blobs: %d (%f%%) found, but limit set to %d (%f%%). "
@@ -178,12 +178,24 @@ def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
             )
             conn.commit()
 
+        print_limit = 20
+        removed_demos = 0
+        removed_jsons = 0
         for blob in minio_demoblobs_dict.values():
-            logger.info("Removing orphaned demo %s", blob.object_name)
+            if removed_demos < print_limit:
+                logger.info("Removing orphaned demo %s", blob.object_name)
             minio_client.remove_object("demoblobs", blob.object_name)
+            removed_demos += 1
+        if removed_demos > print_limit:
+            logger.info("Removing %d more orphaned demos...", removed_demos - print_limit)
         for blob in minio_jsonblobs_dict.values():
-            logger.info("Removing orphaned json %s", blob.object_name)
+            if removed_jsons < print_limit:
+                logger.info("Removing orphaned json %s", blob.object_name)
             minio_client.remove_object("jsonblobs", blob.object_name)
+            removed_jsons += 1
+        if removed_jsons > print_limit:
+            logger.info("Removing %d more orphaned jsons...", removed_jsons - print_limit)
+
 
 
 def get_total_storage_usage(minio_client: Minio) -> int:
