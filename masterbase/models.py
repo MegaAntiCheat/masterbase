@@ -5,6 +5,14 @@ from typing import Any
 
 from pydantic import BaseModel
 
+class Verdict(str, Enum):
+    """Valid verdicts for reviews."""
+
+    NONE = "none"
+    BENIGN = "benign"
+    INCONCLUSIVE = "inconclusive"
+    CONFIRMED = "confirmed"
+    ERROR = "error"
 
 class ReportReason(str, Enum):
     """Valid reasons for reports."""
@@ -55,3 +63,24 @@ class MarkIngestedBody(BaseModel):
     """Model for ingest post request body."""
 
     session_ids: list[str]
+
+class CaseActionType(str, Enum):
+    """Valid action types for cases."""
+
+    CREATE_CASE = "create_case"
+    PUBLISH_CASE = "publish_case"
+    WITHDRAW_CASE = "withdraw_case"
+    SET_JUDGEMENT = "set_judgement"
+    SET_REVIEW = "set_review"
+
+class CaseAction(BaseModel):
+    """Valid actions for cases."""
+    actiontype: CaseActionType
+    parameters: dict[str, Any] | None
+    timestamp: str
+
+class CaseBody(BaseModel):
+    """Model for case creation post request body."""
+
+    target_steam_id: str
+    actions: list[CaseAction]

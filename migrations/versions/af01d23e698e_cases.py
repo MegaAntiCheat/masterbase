@@ -63,3 +63,6 @@ def downgrade():
         );
         """
     )
+    op.execute("""
+        DROP TABLE cases;
+    """)
