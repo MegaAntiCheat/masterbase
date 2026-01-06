@@ -126,19 +126,37 @@ def get_case(engine: Engine, target_steam_id: str) -> CaseBody | None:
         return case_body
 
 
-def generate_cases(engine: Engine, count: int):
+def generate_case(engine: Engine):
     """Automatically select a target and open a new case for them."""
-    potential_targets = select_targets_for_case()
-
-    # TODO: placeholder
+    
+    # TODO: placeholder?
+    potential_targets = select_targets_for_case(engine, 1)
     target_steam_id = potential_targets[0]
 
     return create_case(engine, target_steam_id)
 
-def select_targets_for_case() -> list[str]:
-    """Returns a list of potential targets for a case."""
-    # TODO: implement
-    return []
+def select_targets_for_case(engine: Engine, count: int) -> list[str]:
+    """Returns a sorted list of potential targets for a case."""
+
+    # TODO: Just summing all detections for the moment, this should be tuned per algorithm!
+    sql = """
+        SELECT
+            target_steam_id,
+            SUM(detection_count) AS total_detection_count
+        FROM analysis
+        GROUP BY target_steam_id
+        ORDER BY total_detection_count DESC
+        LIMIT :count;
+    """
+
+    params = {"count": count}
+    
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text(sql),
+            params,
+        )
+        return result.all()
 
 def case_is_open(engine: Engine, target_steam_id: str) -> bool | None:
     """Check if a case is currently open for the given target steam ID."""
