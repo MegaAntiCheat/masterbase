@@ -69,15 +69,34 @@ def withdraw_case(engine: Engine, target_steam_id: str):
     return get_case(engine, target_steam_id)
 
 def set_judgement(
+    engine: Engine,
     target_steam_id: str,
     verdict: Verdict,
     reasoning: str,
 ):
     """Set the overall judgement for the case."""
-    # TODO: implement
+    existing_case = get_case(engine, target_steam_id)
+    if existing_case is None:
+        return None
+
+    with engine.connect() as conn:
+        conn.execute(
+            insert_action_sql(target_steam_id, CaseAction(
+                actiontype=CaseActionType.SET_JUDGEMENT,
+                parameters={
+                    "verdict": verdict,
+                    "reasoning": reasoning
+                },
+                timestamp="",
+            ))
+        )
+        conn.commit()
+    
+    return get_case(engine, target_steam_id)
 
 
 def set_review(
+    engine: Engine,
     target_steam_id: str,
     reviewer_steam_id: str,
     verdict: Verdict,
@@ -85,7 +104,26 @@ def set_review(
     session_id: str | None = None,
 ):
     """Set an individual's review for the case."""
-    # TODO: implement
+    existing_case = get_case(engine, target_steam_id)
+    if existing_case is None:
+        return None
+
+    with engine.connect() as conn:
+        conn.execute(
+            insert_action_sql(target_steam_id, CaseAction(
+                actiontype=CaseActionType.SET_REVIEW,
+                parameters={
+                    "verdict": verdict,
+                    "reasoning": reasoning,
+                    "session_id": session_id,
+                    "reviewer_steam_id": reviewer_steam_id
+                },
+                timestamp="",
+            ))
+        )
+        conn.commit()
+
+    return get_case(engine, target_steam_id)
 
 # Helpers
 
