@@ -8,6 +8,7 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.lib import (
+    audit_storage_use,
     cleanup_hung_sessions,
     cleanup_pruned_demos,
     make_db_uri,
@@ -67,6 +68,7 @@ def boot_cleanup(app: Litestar) -> None:
     minio_client = app.state.minio_client
 
     cleanup_hung_sessions(engine)
+    audit_storage_use(engine, minio_client)
     prune_if_necessary(engine, minio_client)
     cleanup_pruned_demos(engine, minio_client)
 

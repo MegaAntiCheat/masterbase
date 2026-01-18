@@ -934,12 +934,50 @@ def cleanup_hung_sessions(engine: Engine) -> None:
         conn.commit()
         logger.info("Deleted %d hanging sessions.", deleted_rows)
 
+def audit_storage_use(engine: Engine, minio_client: Minio):
+    "Finds demo_sessions with demo_size 0 or null and gets the correct value"
+    logger.info("Auditing demo sizes in database...")
+    with engine.begin() as conn:
+        results = conn.execute(
+            sa.text(
+                """
+                SELECT session_id FROM demo_sessions
+                WHERE (demo_size = 0 OR demo_size = NULL) AND pruned = false;
+                """
+            )
+        )
+        for row in results:
+            session_id = row.session_id
+            object_name = f"{session_id}.dem"
+
+            try:
+                info = minio_client.stat_object("demoblobs", object_name)
+                filesize = info.size
+
+                conn.execute(
+                    sa.text("""
+                        UPDATE demo_sessions
+                        SET demo_size = :filesize
+                        WHERE session_id = :session_id
+                    """),
+                    {"filesize": filesize, "session_id": session_id}
+                )
+                logger.info(f"Updated session {session_id} with demo_size={filesize}")
+            except S3Error as e:
+                if e.code == "NoSuchKey":
+                    logger.info(f"Blob does not exist for session {session_id}")
+                else:
+                    raise
+            except Exception as e:
+                logger.error(f"Failed to set demo_size for {session_id}: {e}")
+                raise
+            
 
 # This function is only meant to run on boot!
 def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
     """Mark sessions as pruned so the specificed amount of free space is available."""
     logger.info("Checking if we need to prune demos...")
-    current_size = get_total_storage_usage(minio_client)
+    current_size = get_total_storage_usage(engine)
 
     with engine.connect() as conn:
         max_result = conn.execute(
@@ -1084,18 +1122,17 @@ def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
             minio_client.remove_object("jsonblobs", blob.object_name)
 
 
-def get_total_storage_usage(minio_client: Minio) -> int:
-    """Get the total storage used by all buckets in bytes."""
+def get_total_storage_usage(engine: Engine) -> int:
+    """Get the total storage used by demos in bytes using the DB's demo_size column."""
     try:
-        buckets = minio_client.list_buckets()
-        total_size = 0
-
-        for bucket in buckets:
-            objects = minio_client.list_objects(bucket.name, recursive=True)
-            bucket_size = sum(obj.size for obj in objects)
-            total_size += bucket_size
+        with engine.connect() as conn:
+            result = conn.execute(
+                sa.text("SELECT SUM(demo_size) FROM demo_sessions WHERE pruned = false")
+            )
+            total_size = result.scalar() or 0  # Returns 0 if there are no sessions
 
         return total_size
-    except S3Error as exc:
+
+    except Exception as exc:
         print("Error occurred:", exc)
         return -1
