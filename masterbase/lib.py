@@ -907,33 +907,7 @@ def get_broadcasts(engine: Engine) -> list[dict[str, str]]:
             row["post_date"] = row.pop("created_at")
         return rows
 
-
 # This function is only meant to run on boot!
-def cleanup_hung_sessions(engine: Engine) -> None:
-    """Remove any sessions that were left open/active after shutdown."""
-    logger.info("Checking for hanging sessions...")
-    with engine.connect() as conn:
-        result = conn.execute(
-            sa.text(  # We have to delete reports first because of the REFERENCES constraint
-                """
-                DELETE FROM reports WHERE session_id IN (
-                    SELECT session_id FROM demo_sessions
-                    WHERE active = true
-                    OR open = true
-                    OR demo_size IS NULL
-                );
-
-                DELETE FROM demo_sessions
-                WHERE active = true
-                OR open = true
-                OR demo_size IS NULL;
-                """
-            )
-        )
-        deleted_rows = result.rowcount
-        conn.commit()
-        logger.info("Deleted %d hanging sessions.", deleted_rows)
-
 def audit_storage_use(engine: Engine, minio_client: Minio):
     "Finds demo_sessions with demo_size 0 or null and gets the correct value"
     logger.info("Auditing demo sizes in database...")
@@ -942,7 +916,7 @@ def audit_storage_use(engine: Engine, minio_client: Minio):
             sa.text(
                 """
                 SELECT session_id FROM demo_sessions
-                WHERE (demo_size = 0 OR demo_size = NULL) AND pruned = false;
+                WHERE (demo_size = 0 OR demo_size IS NULL) AND pruned = false;
                 """
             )
         )
@@ -971,7 +945,36 @@ def audit_storage_use(engine: Engine, minio_client: Minio):
             except Exception as e:
                 logger.error(f"Failed to set demo_size for {session_id}: {e}")
                 raise
-            
+
+# This function is only meant to run on boot!
+def cleanup_hung_sessions(engine: Engine) -> None:
+    """Remove any sessions that were left open/active after shutdown or are zero-size blobs."""
+    logger.info("Checking for hanging sessions...")
+    with engine.connect() as conn:
+        result = conn.execute(
+            # We have to delete reports first because of the REFERENCES constraint
+            # Since we're auditing beforehand, we can safely delete zero-size sessions as well.
+            sa.text(
+                """
+                DELETE FROM reports WHERE session_id IN (
+                    SELECT session_id FROM demo_sessions
+                    WHERE active = true
+                    OR open = true
+                    OR demo_size = 0
+                    OR demo_size IS NULL
+                );
+
+                DELETE FROM demo_sessions
+                WHERE active = true
+                OR open = true
+                OR demo_size = 0
+                OR demo_size IS NULL;
+                """
+            )
+        )
+        deleted_rows = result.rowcount
+        conn.commit()
+        logger.info("Deleted %d hanging sessions.", deleted_rows)
 
 # This function is only meant to run on boot!
 def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
@@ -1056,7 +1059,7 @@ def prune_if_necessary(engine: Engine, minio_client: Minio) -> bool:
 # This function is only meant to run on boot!
 def cleanup_pruned_demos(engine: Engine, minio_client: Minio) -> None:
     """Remove blobs for pruned or deleted sessions."""
-    logger.info("Checking for orphaned demos.")
+    logger.info("Checking for orphaned demos...")
     with engine.connect() as conn:
         result = conn.execute(
             sa.text(

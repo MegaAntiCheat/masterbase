@@ -67,8 +67,8 @@ def boot_cleanup(app: Litestar) -> None:
     engine = app.state.engine
     minio_client = app.state.minio_client
 
-    cleanup_hung_sessions(engine)
     audit_storage_use(engine, minio_client)
+    cleanup_hung_sessions(engine)
     prune_if_necessary(engine, minio_client)
     cleanup_pruned_demos(engine, minio_client)
 
