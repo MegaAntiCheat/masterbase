@@ -219,7 +219,6 @@ async def check_key_exists(engine: AsyncEngine, api_key: str) -> bool:
         data = result.all()
         if not data:
             return False
-
         return True
 
 

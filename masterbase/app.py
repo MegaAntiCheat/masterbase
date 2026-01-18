@@ -218,7 +218,7 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     return Stream(file.stream(), media_type=MediaType.TEXT, headers=headers)
 
 
-@get("/db_export", guards=[valid_key_guard, analyst_guard])
+@get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
 def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
     """Return a database export of the requested `table`."""
     engine = request.app.state.engine

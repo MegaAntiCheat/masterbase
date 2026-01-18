@@ -1,4 +1,4 @@
-FROM minio/minio:RELEASE.2024-06-06T09-36-42Z
+FROM minio/minio:RELEASE.2025-09-07T16-13-09Z
 
 VOLUME /blobs/
 
