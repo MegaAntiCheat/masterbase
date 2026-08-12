@@ -7,28 +7,23 @@ from minio import Minio
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from masterbase.lib import (
-    audit_storage_use,
-    cleanup_hung_sessions,
-    cleanup_pruned_demos,
-    make_db_uri,
-    make_minio_client,
-)
-from masterbase.pruning import (
-    cleanup_hung_sessions,
-    cleanup_pruned_demos,
-    prune_if_necessary,
-)
+from masterbase.cleanup import init_cleanup_runner, start_cleanup_runner, stop_cleanup_runner
+from masterbase.lib import make_db_uri, make_minio_client
 
 
 def get_minio_connection(app: Litestar) -> Minio:
-    """Initialize and mount S3-compatible client, if not already attached."""
+    """Initialize and mount S3-compatible client, if not already attached.
+    
+    Buckets:
+    - rawblobs: Raw .dem files (uploaded at session close)
+    - demoblobs: Compressed .dem.tar.xz files (created by background compression)
+    - jsonblobs: Analysis result JSON files
+    """
     if not getattr(app.state, "minio_client", None):
         minio_client = make_minio_client()
-        if not minio_client.bucket_exists("demoblobs"):
-            minio_client.make_bucket("demoblobs", "us-east-1")
-        if not minio_client.bucket_exists("jsonblobs"):
-            minio_client.make_bucket("jsonblobs", "us-east-1")
+        for bucket in ("rawblobs", "demoblobs", "jsonblobs"):
+            if not minio_client.bucket_exists(bucket):
+                minio_client.make_bucket(bucket, "us-east-1")
         app.state.minio_client = minio_client
 
     return cast(Minio, app.state.minio_client)
@@ -61,21 +56,28 @@ def get_async_db_connection(app: Litestar) -> AsyncEngine:
 
 
 async def close_async_db_connection(app: Litestar) -> None:
-    """Close the db connection stored in the application State object."""
+    """Close the async db connection stored in the application State object."""
     if getattr(app.state, "async_engine", None):
         await cast("AsyncEngine", app.state.async_engine).dispose()
 
 
-def boot_cleanup(app: Litestar) -> None:
-    """Cleanup the database on boot."""
+def init_background_cleanup(app: Litestar) -> None:
+    """Initialize and start the background cleanup runner.
+    
+    Cleanup runs asynchronously in a daemon thread, so startup is not blocked.
+    The first cleanup cycle runs immediately in the background thread.
+    """
     engine = app.state.engine
     minio_client = app.state.minio_client
-
-    audit_storage_use(engine, minio_client)
-    cleanup_hung_sessions(engine)
-    prune_if_necessary(engine, minio_client)
-    cleanup_pruned_demos(engine, minio_client)
+    
+    init_cleanup_runner(engine, minio_client)
+    start_cleanup_runner()
 
 
-startup_registers = (get_db_connection, get_async_db_connection, get_minio_connection, boot_cleanup)
-shutdown_registers = (close_db_connection, close_async_db_connection)
+def shutdown_background_cleanup(app: Litestar) -> None:
+    """Stop the background cleanup runner on shutdown."""
+    stop_cleanup_runner()
+
+
+startup_registers = (get_db_connection, get_async_db_connection, get_minio_connection, init_background_cleanup)
+shutdown_registers = (shutdown_background_cleanup, close_db_connection, close_async_db_connection)

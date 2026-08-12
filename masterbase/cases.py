@@ -1,4 +1,8 @@
-"""Module for managing cases and judgements."""
+"""Module for managing cases and judgements.
+
+TODO: Future work - this module is not yet integrated into the application.
+The cases feature is planned but not currently used.
+"""
 
 import sqlalchemy as sa
 from sqlalchemy import (

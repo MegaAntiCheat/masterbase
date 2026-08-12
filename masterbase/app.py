@@ -1,5 +1,6 @@
 """Litestar Application for serving and ingesting data."""
 
+import io
 import logging
 import os
 import sys
@@ -15,6 +16,7 @@ from litestar.exceptions import HTTPException, PermissionDeniedException
 from litestar.handlers import WebsocketListener
 from litestar.response import Redirect, Response, Stream
 from litestar.status_codes import HTTP_500_INTERNAL_SERVER_ERROR
+from minio import S3Error
 from sqlalchemy.exc import IntegrityError
 
 # This is required for Docker Desktop on windows to detect the module
@@ -52,6 +54,7 @@ from masterbase.lib import (
     late_bytes_helper,
     list_demos_helper,
     provision_api_key,
+    raw_blob_name,
     resolve_hostname,
     set_open_false,
     set_open_true,
@@ -197,7 +200,10 @@ async def list_demos(
 
 @get("/demodata", guards=[valid_key_guard, session_closed_guard, analyst_guard])
 async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
-    """Return the demo."""
+    """Return the compressed demo (.dem.tar.xz) from demoblobs.
+
+    Used primarily by analysis clients and analysts for mass downloads.
+    """
     minio_client = request.app.state.minio_client
     blob_name = demo_blob_name(session_id)
 
@@ -213,6 +219,63 @@ async def demodata(request: Request, api_key: str, session_id: str) -> Stream:
     }
 
     return Stream(file.stream(), media_type=MediaType.TEXT, headers=headers)
+
+
+@get("/demodata_raw", guards=[valid_key_guard, session_closed_guard])
+async def demodata_raw(request: Request, api_key: str, session_id: str) -> Stream:
+    """Return the uncompressed demo (.dem) for end users.
+
+    Tries rawblobs first (if demo hasn't been compressed yet).
+    Falls back to decompressing from demoblobs on-the-fly.
+    """
+    import tarfile as tf
+
+    minio_client = request.app.state.minio_client
+
+    # Try raw blob first (demo not yet compressed)
+    try:
+        raw_name = raw_blob_name(session_id)
+        raw_stat = minio_client.stat_object("rawblobs", raw_name)
+        raw_file = minio_client.get_object("rawblobs", raw_name)
+        headers = {
+            "Content-Disposition": f'attachment; filename="{session_id}.dem"',
+            "Content-Length": str(raw_stat.size),
+        }
+        return Stream(raw_file.stream(), media_type=MediaType.TEXT, headers=headers)
+    except S3Error as e:
+        if e.code != "NoSuchKey":
+            raise
+        #else: File no longer available
+
+    # Fall back: decompress from demoblobs
+    try:
+        compressed_name = demo_blob_name(session_id)
+        compressed_data = minio_client.get_object("demoblobs", compressed_name)
+        compressed_bytes = compressed_data.read()
+        compressed_data.stream().close()
+    except S3Error as e:
+        if e.code == "NoSuchKey":
+            raise HTTPException(detail="Demo not found!", status_code=404) from e
+        raise
+    except Exception as exc:
+        raise HTTPException(detail="Demo not found!", status_code=404) from exc
+
+    # Decompress tar.xz in memory
+    try:
+        with tf.open(fileobj=io.BytesIO(compressed_bytes), mode="r:xz") as tar:
+            member = tar.getmember(f"{session_id}.dem")
+            demo_bytes = tar.extractfile(member).read()
+    except Exception as exc:
+        raise HTTPException(
+            detail="Failed to decompress demo!", status_code=HTTP_500_INTERNAL_SERVER_ERROR
+        ) from exc
+
+    headers = {
+        "Content-Disposition": f'attachment; filename="{session_id}.dem"',
+        "Content-Length": str(len(demo_bytes)),
+    }
+
+    return Stream(io.BytesIO(demo_bytes), media_type=MediaType.TEXT, headers=headers)
 
 
 @get("/db_export", guards=[valid_key_guard, analyst_guard])
@@ -481,6 +544,7 @@ app = Litestar(
         provision_handler,
         late_bytes,
         demodata,
+        demodata_raw,
         list_demos,
         analyst_list_demos,
         report_player,

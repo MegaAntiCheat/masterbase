@@ -6,6 +6,7 @@ import logging
 import os
 import secrets
 import socket
+import tarfile
 from datetime import datetime, timezone
 from queue import Queue
 from threading import Thread
@@ -29,6 +30,7 @@ os.makedirs(DEMOS_PATH, exist_ok=True)
 
 LATE_BYTES_START = 0x420
 LATE_BYTES_END = 0x430
+LATE_BYTES_SIZE = LATE_BYTES_END - LATE_BYTES_START  # 16 bytes
 
 
 def resolve_hostname(hostname: str) -> str:
@@ -409,7 +411,12 @@ def _close_session_with_demo(
     current_time: datetime,
     markov_score: float,
 ) -> None:
-    """Close out a session in the DB, sink to MinIO."""
+    """Close out a session in the DB, upload raw demo to rawblobs in MinIO.
+
+    Compression to tar.xz happens asynchronously via the background task queue.
+    """
+    from masterbase.tasks import TASK_COMPRESS, enqueue_task
+
     sink_path = demo_sink_path(session_id)
     size = os.stat(sink_path).st_size
     with engine.connect() as conn:
@@ -439,20 +446,31 @@ def _close_session_with_demo(
             },
         ).scalar_one()
         if late_bytes is not None:
-            with open(sink_path, "rb") as sink:
-                late = io.BytesIO(late_bytes)
-                head = io.BytesIO(sink.read(LATE_BYTES_START))
-                sink.seek(LATE_BYTES_END, os.SEEK_SET)
-                minio_client.put_object(
-                    "demoblobs",
-                    demo_blob_name(session_id),
-                    data=cast(BinaryIO, ConcatStream(head, late, sink)),
-                    length=size,
-                    metadata={"has_late_bytes": str(bool(late_bytes))},
+            if len(late_bytes) != LATE_BYTES_SIZE:
+                logger.error(
+                    "Late bytes for session %s is %d bytes, expected %d. Skipping injection.",
+                    session_id, len(late_bytes), LATE_BYTES_SIZE
                 )
+                # Fall through to upload without late bytes injection
+                minio_client.fput_object("rawblobs", raw_blob_name(session_id), file_path=sink_path)
+            else:
+                with open(sink_path, "rb") as sink:
+                    late = io.BytesIO(late_bytes)
+                    head = io.BytesIO(sink.read(LATE_BYTES_START))
+                    sink.seek(LATE_BYTES_END, os.SEEK_SET)
+                    minio_client.put_object(
+                        "rawblobs",
+                        raw_blob_name(session_id),
+                        data=cast(BinaryIO, ConcatStream(head, late, sink)),
+                        length=size,
+                        metadata={"has_late_bytes": str(bool(late_bytes))},
+                    )
         else:
-            minio_client.fput_object("demoblobs", demo_blob_name(session_id), file_path=sink_path)
+            minio_client.fput_object("rawblobs", raw_blob_name(session_id), file_path=sink_path)
         conn.commit()
+
+    # Enqueue compression task
+    enqueue_task(engine, session_id, TASK_COMPRESS)
 
 
 def close_session_helper(
@@ -519,7 +537,12 @@ def close_session_helper(
 
 
 def demo_blob_name(session_id: str) -> str:
-    """Format the object name for a demo blob."""
+    """Format the object name for a compressed demo blob (.dem.tar.xz in demoblobs bucket)."""
+    return f"{session_id}.dem.tar.xz"
+
+
+def raw_blob_name(session_id: str) -> str:
+    """Format the object name for a raw demo blob (.dem in rawblobs bucket)."""
     return f"{session_id}.dem"
 
 
@@ -530,13 +553,47 @@ def json_blob_name(session_id: str) -> str:
 
 def demo_sink_path(session_id: str) -> str:
     """Format the media path for a demo blob."""
-    return os.path.join(DEMOS_PATH, demo_blob_name(session_id))
+    return os.path.join(DEMOS_PATH, f"{session_id}.dem")
 
 
 def stat_demo_blob(minio_client: Minio, session_id: str) -> BlobStat | None:
-    """Return information on the status of a given blob if it exists, else None."""
+    """Return information on the status of a given blob if it exists, else None.
+    
+    Tries compressed format (demoblobs) first, then falls back to raw (rawblobs).
+    """
     try:
-        return minio_client.stat_object("demos", demo_blob_name(session_id))
+        return minio_client.stat_object("demoblobs", demo_blob_name(session_id))
+    except S3Error as err:
+        if err.code == "NoSuchKey":
+            # Try raw format
+            try:
+                return minio_client.stat_object("rawblobs", raw_blob_name(session_id))
+            except S3Error as err2:
+                if err2.code == "NoSuchKey":
+                    return None
+                else:
+                    raise err2
+        else:
+            raise
+
+
+def get_demo_blob_info(minio_client: Minio, session_id: str) -> tuple[str, str, BlobStat] | None:
+    """Get bucket name, object name, and stats for a demo blob.
+    
+    Returns (bucket, object_name, stat) or None if not found.
+    Tries compressed format (demoblobs) first, then falls back to raw (rawblobs).
+    """
+    # Try compressed format first
+    try:
+        stat = minio_client.stat_object("demoblobs", demo_blob_name(session_id))
+        return ("demoblobs", demo_blob_name(session_id), stat)
+    except S3Error as err:
+        if err.code != "NoSuchKey":
+            raise
+    # Fall back to raw format
+    try:
+        stat = minio_client.stat_object("rawblobs", raw_blob_name(session_id))
+        return ("rawblobs", raw_blob_name(session_id), stat)
     except S3Error as err:
         if err.code == "NoSuchKey":
             return None
@@ -572,10 +629,10 @@ def late_bytes_helper(
         conn.execute(
             sa.text(
                 """UPDATE demo_sessions
-                    SET
-                    late_bytes = :late_bytes,
-                    updated_at = :updated_at
-                    WHERE session_id = session_id;"""
+                SET
+                late_bytes = :late_bytes,
+                updated_at = :updated_at
+                WHERE session_id = :session_id;"""
             ),
             {
                 "session_id": session_id,
