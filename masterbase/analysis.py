@@ -1,10 +1,11 @@
 """Analysis ingestion logic."""
 
+import io
 import json
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
-from minio import Minio, S3Error
+from minio import Minio
 from pydantic import ValidationError
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
@@ -133,32 +134,75 @@ def ingest_demos(minio_client: Minio, engine: Engine, session_ids: list[str]) ->
 
 AnalysisSummary = dict[tuple[str, str], int]
 
-def ingest_preprocess_analysis(minio_client: Minio, session_id: str) -> AnalysisSummary | str:
-    """Ingest a demo analysis from an analysis client."""
+
+def submit_analysis(
+    minio_client: Minio, engine: Engine, session_id: str, analysis: Analysis
+) -> str | None:
+    """Submit analysis results via HTTPS and ingest into database.
+    
+    Writes raw JSON to MinIO for archival, then ingests into DB.
+    Returns error message or None on success.
+    """
+    # Write raw JSON to MinIO for archival
     blob_name = json_blob_name(session_id)
     try:
-        raw_data = minio_client.get_object("jsonblobs", blob_name).read()
-        decoded_data = raw_data.decode("utf-8")
-        json_data = json.JSONDecoder().decode(decoded_data)
-        data = Analysis.parse_obj(json_data)
-    except S3Error as err:
-        if err.code == "NoSuchKey":
-            return "No analysis blob was found."
-        else:
-            return "Unexpected S3 error while looking up analysis data: " + str(err)
-    except ValidationError:
-        return "Analysis data does not conform to schema."
-    except json.JSONDecodeError:
-        return "Malformed JSON data in analysis blob."
+        json_bytes = analysis.model_dump_json().encode()
+        minio_client.put_object(
+            "jsonblobs", blob_name, io.BytesIO(json_bytes), len(json_bytes)
+        )
     except Exception as err:
-        return "Unexpected error while decoding analysis data: " + str(err)
-
-    # Data preprocessing
+        return f"Failed to store analysis JSON: {err}"
+    
+    check_sql = "SELECT session_id, ingested, active, open FROM demo_sessions WHERE session_id = :session_id;"
+    wipe_sql = "DELETE FROM analysis WHERE session_id = :session_id;"
+    insert_sql = """\
+        INSERT INTO analysis (
+            session_id, target_steam_id, algorithm_type, detection_count, created_at
+        ) VALUES (
+            :session_id, :target_steam_id, :algorithm, :count, :created_at
+        );
+    """
+    mark_sql = "UPDATE demo_sessions SET ingested = true WHERE session_id = :session_id;"
+    
+    created_at = datetime.now().astimezone(timezone.utc).isoformat()
+    
+    # Preprocess: count detections by (player, algorithm)
     algorithm_counts = AnalysisSummary()
-    for detection in data.detections:
-        key = (detection.player, detection.algorithm)
+    for detection in analysis.detections:
+        key = (str(detection.player), detection.algorithm)
         if key not in algorithm_counts:
             algorithm_counts[key] = 0
         algorithm_counts[key] += 1
-
-    return algorithm_counts
+    
+    with engine.begin() as conn:
+        # Check session state
+        row = conn.execute(sa.text(check_sql), {"session_id": session_id}).fetchone()
+        if row is None:
+            return "Unknown session_id"
+        if row.ingested:
+            return "demo already ingested"
+        if row.active:
+            return "session is still active"
+        if row.open:
+            return "session is still open"
+        
+        # Wipe existing analysis
+        conn.execute(sa.text(wipe_sql), {"session_id": session_id})
+        
+        # Insert new analysis data
+        for (target_steam_id, algorithm), count in algorithm_counts.items():
+            conn.execute(
+                sa.text(insert_sql),
+                {
+                    "session_id": session_id,
+                    "target_steam_id": target_steam_id,
+                    "algorithm": algorithm,
+                    "count": count,
+                    "created_at": created_at,
+                },
+            )
+        
+        # Mark as ingested
+        conn.execute(sa.text(mark_sql), {"session_id": session_id})
+    
+    return None

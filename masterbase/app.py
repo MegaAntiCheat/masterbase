@@ -62,7 +62,7 @@ from masterbase.lib import (
     steam_id_from_api_key,
     update_api_key,
 )
-from masterbase.models import ExportTable, LateBytesBody, MarkIngestedBody, ReportBody
+from masterbase.models import AnalysisBody, ExportTable, LateBytesBody, ReportBody
 from masterbase.registers import shutdown_registers, startup_registers
 from masterbase.steam import account_exists, is_limited_account
 
@@ -301,15 +301,16 @@ async def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
     return demos
 
 
-@post("/ingest", guards=[valid_key_guard, analyst_guard])
-async def ingest(request: Request, api_key: str, data: MarkIngestedBody) -> dict[str, bool]:
-    """Report analysis as completed, ingest into database."""
-    minio_client = request.app.state.minio_client
-    errors = ingest_demos(minio_client, request.app.state.engine, data.session_ids)
+@post("/analysis", guards=[valid_key_guard, analyst_guard])
+async def submit_analysis(request: Request, api_key: str, data: AnalysisBody) -> dict[str, bool]:
+    """Submit analysis results for a session and ingest into database."""
+    from masterbase.analysis import submit_analysis as ingest_single
     
-    return [
-        {"session_id": session_id, "ingested": not bool(error)} for session_id, error in zip(data.session_ids, errors)
-    ]
+    minio_client = request.app.state.minio_client
+    engine = request.app.state.engine
+    error = ingest_single(minio_client, engine, data.session_id, data.analysis)
+    
+    return {"session_id": data.session_id, "ingested": error is None}
 
 
 @post("/report", guards=[valid_key_guard])
@@ -551,7 +552,7 @@ app = Litestar(
         db_export,
         jobs,
         broadcasts,
-        ingest,
+        submit_analysis,
     ],
     exception_handlers={Exception: plain_text_exception_handler},
     on_shutdown=shutdown_registers,

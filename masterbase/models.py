@@ -59,10 +59,11 @@ class LateBytesBody(BaseModel):
 
     late_bytes: str
 
-class MarkIngestedBody(BaseModel):
-    """Model for ingest post request body."""
+class AnalysisBody(BaseModel):
+    """Model for analysis submission post request body."""
 
-    session_ids: list[str]
+    session_id: str
+    analysis: Analysis
 
 class CaseActionType(str, Enum):
     """Valid action types for cases."""
