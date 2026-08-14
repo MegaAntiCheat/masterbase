@@ -1,6 +1,7 @@
 """Background cleanup tasks that run periodically and non-blocking."""
 
 import logging
+import math
 import signal
 import sys
 import threading
@@ -14,7 +15,15 @@ from minio.datatypes import Object as BlobStat
 from sqlalchemy import Engine
 
 from masterbase.lib import demo_blob_name, json_blob_name, raw_blob_name
-from masterbase.tasks import process_next_task
+from masterbase.tasks import (
+    TASK_HANDLERS,
+    cleanup_old_tasks,
+    claim_task,
+    complete_task,
+    fail_task,
+    set_engine_ref,
+    TASK_WORKER_THREADS,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -205,6 +214,7 @@ def audit_storage_use(engine: Engine, minio_client: Minio) -> int:
                 logger.info(f"Blob does not exist for session {session_id}")
                 continue
 
+            try:
                 filesize = info.size
                 conn.execute(
                     sa.text("""
@@ -448,26 +458,31 @@ def _cleanup_media_orphans(session_ids_in_db: list[str]) -> None:
 
 class CleanupRunner:
     """Background runner that periodically executes cleanup tasks."""
-    
+
     def __init__(self, engine: Engine, minio_client: Minio):
         self.engine = engine
         self.minio_client = minio_client
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         self._running = False
-    
+        # Track running tasks per type
+        self._running_counts: dict[str, int] = {}
+        self._running_lock = threading.Lock()
+
     def start(self):
         """Start the background cleanup thread."""
         if self._running:
             logger.warning("Cleanup runner already started.")
             return
-        
+
         self._running = True
         self._stop_event.clear()
+        # Set engine ref for handlers that need it
+        set_engine_ref(self.engine)
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
-        logger.info("Background cleanup runner started.")
-    
+        logger.info("Background cleanup runner started (%d worker threads).", TASK_WORKER_THREADS)
+
     def stop(self):
         """Stop the background cleanup thread."""
         self._running = False
@@ -491,46 +506,125 @@ class CleanupRunner:
         logger.info("Initial cleanup cycle completed.")
     
     def _run_loop(self):
-        """Main loop: process tasks continuously, run cleanup periodically.
-
-        Flow:
-        1. Process background tasks promptly (no waiting).
-        2. When 15-min timer fires: pause task claiming, wait for any
-           in-flight task to finish, run cleanup, resume tasks, reset timer.
-        """
-        # Run initial cleanup immediately
+        """Main loop: dispatch tasks to worker threads, run cleanup periodically."""
         self.run_initial_cleanup()
 
-        # Event to signal that cleanup is active (tasks should pause)
         cleanup_active = threading.Event()
         next_cleanup_time = time.time() + CLEANUP_INTERVAL
-        worker_id = f"cleanup-{id(self)}"
 
         while self._running and not self._stop_event.is_set():
-            # --- Check if cleanup timer fired ---
             now = time.time()
             if now >= next_cleanup_time and not cleanup_active.is_set():
-                # Signal pause to prevent new tasks from being claimed
                 cleanup_active.set()
-
-                # We're outside any task handler here (loop structure guarantees
-                # no in-flight task), so proceed directly to cleanup.
                 try:
                     self._run_cleanup_only()
                 except Exception as e:
                     logger.error("Cleanup cycle failed: %s", e, exc_info=True)
-
-                # Resume task claiming and reset timer
                 cleanup_active.clear()
                 next_cleanup_time = time.time() + CLEANUP_INTERVAL
 
-            # --- Process tasks if not in cleanup pause ---
             if not cleanup_active.is_set():
-                if process_next_task(self.engine, self.minio_client, worker_id):
-                    continue  # Process next task immediately (no sleep)
+                self._dispatch_tasks()
 
-            # Sleep briefly before looping to avoid busy wait
             self._stop_event.wait(timeout=1)
+
+    def _dispatch_tasks(self) -> None:
+        """Dispatch tasks to worker threads using weighted scheduling."""
+        with self._running_lock:
+            running = sum(self._running_counts.values())
+            available = TASK_WORKER_THREADS - running
+            if available <= 0:
+                return
+
+            # Count pending tasks per type
+            pending_counts: dict[str, int] = {}
+            for task_type in TASK_HANDLERS:
+                with self.engine.connect() as conn:
+                    result = conn.execute(
+                        __import__("sqlalchemy").text(
+                            "SELECT COUNT(*) FROM demo_tasks WHERE status = :status AND task_type = :type"
+                        ),
+                        {"status": "pending", "type": task_type},
+                    )
+                    count = result.scalar()
+                    if count > 0:
+                        pending_counts[task_type] = count
+
+            if not pending_counts:
+                return
+
+            dispatched = 0
+            while available > 0 and pending_counts:
+                # First pass: give each type with no running task one thread
+                started = False
+                for tt in list(pending_counts):
+                    if self._running_counts.get(tt, 0) == 0 and available > 0:
+                        self._start_task(tt)
+                        pending_counts[tt] -= 1
+                        if pending_counts[tt] == 0:
+                            del pending_counts[tt]
+                        available -= 1
+                        dispatched += 1
+                        started = True
+                if started:
+                    continue
+
+                # Second pass: weight by ln(waiting) - running
+                best_type = None
+                best_score = -float("inf")
+                for tt, waiting in pending_counts.items():
+                    r = self._running_counts.get(tt, 0)
+                    score = math.log(waiting) - r
+                    if score > best_score:
+                        best_score = score
+                        best_type = tt
+                if best_type is None:
+                    break
+                self._start_task(best_type)
+                pending_counts[best_type] -= 1
+                if pending_counts[best_type] == 0:
+                    del pending_counts[best_type]
+                available -= 1
+                dispatched += 1
+
+            if dispatched:
+                logger.debug("Dispatched %d tasks (%d threads available).", dispatched, TASK_WORKER_THREADS)
+
+    def _start_task(self, task_type: str) -> None:
+        """Start a worker thread for a task of the given type."""
+        self._running_counts[task_type] = self._running_counts.get(task_type, 0) + 1
+        worker_id = f"worker-{task_type}-{id(threading.current_thread())}"
+        t = threading.Thread(
+            target=self._worker, args=(task_type, worker_id), daemon=True
+        )
+        t.start()
+
+    def _worker(self, task_type: str, worker_id: str) -> None:
+        """Worker thread: claim and process a single task."""
+        task = claim_task(self.engine, task_type, worker_id)
+        if task is None:
+            # Task was already claimed by another worker
+            with self._running_lock:
+                self._running_counts[task_type] = max(0, self._running_counts.get(task_type, 0) - 1)
+            return
+
+        task_id = task["id"]
+        session_id = task["session_id"]
+        handler = TASK_HANDLERS[task_type]
+
+        logger.info("Processing task %s (%s) for session %s", task_id, task_type, session_id)
+        try:
+            error = handler(self.minio_client, session_id)
+            if error:
+                fail_task(self.engine, task_id, error)
+            else:
+                complete_task(self.engine, task_id)
+        except Exception as e:
+            logger.error("Task %s raised exception: %s", task_id, e, exc_info=True)
+            fail_task(self.engine, task_id, str(e))
+        finally:
+            with self._running_lock:
+                self._running_counts[task_type] = max(0, self._running_counts.get(task_type, 0) - 1)
 
     def _run_cleanup_only(self):
         """Run periodic cleanup operations (no task processing)."""
@@ -559,6 +653,12 @@ class CleanupRunner:
             cleanup_pruned_demos(self.engine, self.minio_client)
         except Exception as e:
             logger.error("Orphaned blob cleanup failed: %s", e)
+
+        # Cleanup old task records
+        try:
+            cleanup_old_tasks(self.engine)
+        except Exception as e:
+            logger.error("Old task cleanup failed: %s", e)
 
         logger.info("Periodic cleanup cycle completed.")
 

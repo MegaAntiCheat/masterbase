@@ -415,7 +415,7 @@ def _close_session_with_demo(
 
     Compression to tar.xz happens asynchronously via the background task queue.
     """
-    from masterbase.tasks import TASK_COMPRESS, enqueue_task
+    from masterbase.tasks import TASK_ANALYZE, TASK_COMPRESS, enqueue_task
 
     sink_path = demo_sink_path(session_id)
     size = os.stat(sink_path).st_size
@@ -471,6 +471,8 @@ def _close_session_with_demo(
 
     # Enqueue compression task
     enqueue_task(engine, session_id, TASK_COMPRESS)
+    # Enqueue analysis task
+    enqueue_task(engine, session_id, TASK_ANALYZE)
 
 
 def close_session_helper(
