@@ -64,7 +64,7 @@ TASK_HANDLERS: dict[str, type] = {
 }
 
 # Analysis config
-ANALYSIS_BINARY = os.getenv("ANALYSIS_BINARY")
+ANALYSIS_BINARY = "/analysis-binary"
 ANALYSIS_TIMEOUT = int(os.getenv("ANALYSIS_TIMEOUT", "3600"))
 MEDIA_DIR = "/media"
 ANALYSIS_DIR = os.path.join(MEDIA_DIR, "analysis")

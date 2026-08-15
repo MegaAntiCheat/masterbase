@@ -5,22 +5,21 @@ services:
     build:
       context: .
       dockerfile: ./services/minio/Dockerfile
-    container_name: minio
+    container_name: ${MINIO_CONTAINER_NAME:-masterbase_minio}
+    restart: always
     env_file:
       - vars.env
     ports:
       - "9000:9000"
-    environment:
-      MINIO_ROOT_USER: MEGASCATTERBOMB
-      MINIO_ROOT_PASSWORD: masterbase
     volumes:
-      - demo_data:/blobs/
+      - ${MINIO_VOLUME_NAME:-demo_data}:/blobs/
 
   db:
     build:
       context: .
       dockerfile: ./services/db/Dockerfile
-    container_name: db
+    container_name: ${DB_CONTAINER_NAME:-masterbase_db}
+    restart: always
     env_file:
       - vars.env
     environment:
@@ -28,15 +27,16 @@ services:
     ports:
       - "8050:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data/
+      - ${DB_VOLUME_NAME:-db_data}:/var/lib/postgresql/data/
 
   api:
     build:
       context: .
       dockerfile: ./services/api/Dockerfile
       args:
-        DEVELOPMENT: ${DEVELOPMENT}
-    container_name: api
+        DEVELOPMENT: ${DEVELOPMENT:-false}
+    container_name: ${API_CONTAINER_NAME:-masterbase_api}
+    restart: always
     env_file:
       - vars.env
     environment:
@@ -44,14 +44,16 @@ services:
       MINIO_HOST: minio
     ports:
       - "8000:8000"
+    volumes:
+      - ${ANALYSIS_BINARY}:/analysis-binary:ro
     depends_on:
       - minio
 
 
 networks:
-  masterbase_default:
+  ${NETWORK_NAME:-network}:
     driver: bridge
 
 volumes:
-  demo_data:
-  db_data:
+  ${MINIO_VOLUME_NAME:-demo_data}:
+  ${DB_VOLUME_NAME:-db_data}:
