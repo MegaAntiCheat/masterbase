@@ -6,6 +6,8 @@ services:
       context: .
       dockerfile: ./services/minio/Dockerfile
     container_name: minio
+    env_file:
+      - vars.env
     ports:
       - "9000:9000"
     environment:
@@ -19,9 +21,9 @@ services:
       context: .
       dockerfile: ./services/db/Dockerfile
     container_name: db
+    env_file:
+      - vars.env
     environment:
-      POSTGRES_USER: MEGASCATTERBOMB
-      POSTGRES_PASSWORD: masterbase
       POSTGRES_DB: demos
     ports:
       - "8050:5432"
@@ -35,18 +37,11 @@ services:
       args:
         DEVELOPMENT: ${DEVELOPMENT}
     container_name: api
+    env_file:
+      - vars.env
     environment:
-      DEVELOPMENT: ${DEVELOPMENT}
-      DEBUG_WAIT_FOR_ATTACH: ${DEBUG_WAIT_FOR_ATTACH}
-      STEAM_API_KEY: ${STEAM_API_KEY}
-      POSTGRES_USER: MEGASCATTERBOMB
-      POSTGRES_PASSWORD: masterbase
       POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
       MINIO_HOST: minio
-      MINIO_PORT: 9000
-      MINIO_ACCESS_KEY: MEGASCATTERBOMB
-      MINIO_SECRET_KEY: masterbase
     ports:
       - "8000:8000"
     depends_on:

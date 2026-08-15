@@ -7,7 +7,7 @@ from minio import Minio
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from masterbase.cleanup import init_cleanup_runner, start_cleanup_runner, stop_cleanup_runner
+from masterbase.taskengine import init_task_runner, start_task_runner, stop_task_runner
 from masterbase.lib import make_db_uri, make_minio_client
 
 
@@ -70,13 +70,13 @@ def init_background_cleanup(app: Litestar) -> None:
     engine = app.state.engine
     minio_client = app.state.minio_client
     
-    init_cleanup_runner(engine, minio_client)
-    start_cleanup_runner()
+    init_task_runner(engine, minio_client)
+    start_task_runner()
 
 
 def shutdown_background_cleanup(app: Litestar) -> None:
     """Stop the background cleanup runner on shutdown."""
-    stop_cleanup_runner()
+    stop_task_runner()
 
 
 startup_registers = (get_db_connection, get_async_db_connection, get_minio_connection, init_background_cleanup)

@@ -1,0 +1,44 @@
+"""Base class for task handlers."""
+
+from minio import Minio
+from sqlalchemy import Engine
+
+
+class TaskHandler:
+    """Base class for task handlers.
+    
+    Subclasses implement is_done() to check if work is already complete
+    (by inspecting artifacts in MinIO/DB), and run() for the task logic.
+    This avoids duplicating "is this done?" checks across multiple handlers.
+    """
+    
+    task_type: str
+    singleton: bool = False  # If True, task is global (not per-demo); uses sentinel session_id
+    
+    @classmethod
+    def is_done(cls, minio_client: Minio, engine: Engine, session_id: str) -> bool:
+        """Check if this task's work is already done for the given session.
+        
+        Subclasses should check the actual artifacts (MinIO blobs, DB records)
+        rather than the task queue status, as a task may have completed without
+        ever being enqueued (e.g., external ingestion, manual operations).
+        
+        Returns:
+            True if the work is already done and the task can be skipped.
+        """
+        raise NotImplementedError
+    
+    @classmethod
+    def run(cls, minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
+        """Execute the task.
+        
+        Args:
+            minio_client: MinIO client
+            engine: Database engine
+            session_id: Session ID to operate on
+            task_id: Task ID for dependency management
+        
+        Returns:
+            Error message or None on success. Raises TaskDeferred if waiting on a dependency.
+        """
+        raise NotImplementedError
