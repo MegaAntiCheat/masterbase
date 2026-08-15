@@ -13,7 +13,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from queue import Empty, Queue
-from typing import Any, Callable
+from typing import Any, Callable, Type
 
 import sqlalchemy as sa
 from minio import Minio, S3Error
@@ -36,6 +36,68 @@ STATUS_FAILED = "failed"
 
 # Retention for completed/failed tasks (in days)
 TASK_RETENTION_DAYS = 7
+
+
+class TaskDeferred(Exception):
+    """Raised when a task resets itself to pending via depend_on().
+    
+    The worker catches this and skips complete/fail since the task
+    was already reset to pending in the DB.
+    """
+    pass
+
+
+def depend_on(
+    engine: Engine, session_id: str, dep_type: str, my_task_id: int,
+    wait_on_pending: bool = True
+) -> bool:
+    """Check if a dependency task is satisfied.
+    
+    If the dependency is completed, returns True.
+    If the dependency is running (claimed) or pending (when wait_on_pending=True),
+    ensures it's queued and resets this task to pending so the scheduler processes
+    the dependency first.
+    
+    Args:
+        engine: Database engine
+        session_id: Session ID
+        dep_type: Dependency task type (e.g., TASK_COMPRESS)
+        my_task_id: ID of this task (to reset if waiting)
+        wait_on_pending: If True, wait on both pending AND claimed tasks.
+                        If False, only wait on claimed (running) tasks.
+    
+    Returns:
+        True if dependency is satisfied and task can proceed.
+        Raises TaskDeferred if task was reset to pending and should wait.
+    """
+    status = get_task_status(engine, session_id, dep_type)
+    if status == STATUS_COMPLETED:
+        return True
+    # Check if we should wait based on status and wait_on_pending flag
+    should_wait = False
+    if status == STATUS_CLAIMED:
+        # Always wait if dependency is running
+        should_wait = True
+    elif status == STATUS_PENDING and wait_on_pending:
+        # Wait if dependency is pending and we're configured to wait on pending
+        should_wait = True
+    
+    if should_wait:
+        # Ensure dependency is queued (idempotent)
+        enqueue_task(engine, session_id, dep_type)
+        # Reset this task to pending
+        reset_task_to_pending(engine, my_task_id)
+        logger.info(
+            "Task %s waiting for %s (status=%s), reset to pending",
+            my_task_id, dep_type, status,
+        )
+        raise TaskDeferred
+    
+    # Dependency is not blocking (e.g., failed, missing, or pending with wait_on_pending=False)
+    # Ensure it's queued so it can run
+    enqueue_task(engine, session_id, dep_type)
+    return True
+
 
 # Thread pool size
 TASK_WORKER_THREADS = int(os.getenv("TASK_WORKER_THREADS", "4"))
@@ -180,6 +242,139 @@ def fail_task(engine: Engine, task_id: int, error: str) -> None:
                 logger.info("Task %s failed (attempt %d/%d), re-queuing: %s", task_id, new_count, max_attempts, error)
 
 
+def get_task_status(engine: Engine, session_id: str, task_type: str) -> str | None:
+    """Get the status of a task for a given session and type.
+    
+    Returns:
+        Status string or None if no task exists.
+    """
+    with engine.connect() as conn:
+        result = conn.execute(
+            sa.text(
+                """
+                SELECT status FROM demo_tasks
+                WHERE session_id = :session_id AND task_type = :task_type
+                ORDER BY id DESC LIMIT 1;
+                """
+            ),
+            {"session_id": session_id, "task_type": task_type},
+        )
+        row = result.fetchone()
+        return row.status if row else None
+
+
+def reset_task_to_pending(engine: Engine, task_id: int) -> None:
+    """Reset a claimed task back to pending so the scheduler can re-dispatch it."""
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                """
+                UPDATE demo_tasks
+                SET status = :pending, worker_id = NULL, updated_at = NOW()
+                WHERE id = :id;
+                """
+            ),
+            {"pending": STATUS_PENDING, "id": task_id},
+        )
+
+
+class TaskHandler:
+    """Base class for task handlers.
+    
+    Subclasses implement is_done() to check if work is already complete
+    (by inspecting artifacts in MinIO/DB), and run() for the task logic.
+    This avoids duplicating "is this done?" checks across multiple handlers.
+    """
+    
+    task_type: str
+    
+    @classmethod
+    def is_done(cls, minio_client: Minio, engine: Engine, session_id: str) -> bool:
+        """Check if this task's work is already done for the given session.
+        
+        Subclasses should check the actual artifacts (MinIO blobs, DB records)
+        rather than the task queue status, as a task may have completed without
+        ever being enqueued (e.g., external ingestion, manual operations).
+        
+        Returns:
+            True if the work is already done and the task can be skipped.
+        """
+        raise NotImplementedError
+    
+    @classmethod
+    def run(cls, minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
+        """Execute the task.
+        
+        Args:
+            minio_client: MinIO client
+            engine: Database engine
+            session_id: Session ID to operate on
+            task_id: Task ID for dependency management
+        
+        Returns:
+            Error message or None on success. Raises TaskDeferred if waiting on a dependency.
+        """
+        raise NotImplementedError
+
+
+class CompressTask(TaskHandler):
+    """Handler for compression tasks."""
+    
+    task_type = TASK_COMPRESS
+    
+    @classmethod
+    def is_done(cls, minio_client: Minio, engine: Engine, session_id: str) -> bool:
+        """Check if the compressed demo blob already exists in demoblobs."""
+        try:
+            minio_client.stat_object("demoblobs", demo_blob_name(session_id))
+            return True
+        except S3Error:
+            return False
+    
+    @classmethod
+    def run(cls, minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
+        """Execute compression by delegating to compress_demo()."""
+        return compress_demo(minio_client, engine, session_id, task_id)
+
+
+class AnalyzeTask(TaskHandler):
+    """Handler for analysis tasks."""
+    
+    task_type = TASK_ANALYZE
+    
+    @classmethod
+    def is_done(cls, minio_client: Minio, engine: Engine, session_id: str) -> bool:
+        """Check if analysis has already been ingested for this session.
+        
+        Checks the ingested flag in demo_sessions, which is set when analysis
+        results are successfully ingested (either internally or via external client).
+        """
+        with engine.connect() as conn:
+            result = conn.execute(
+                sa.text(
+                    """
+                    SELECT ingested FROM demo_sessions
+                    WHERE session_id = :session_id;
+                    """
+                ),
+                {"session_id": session_id},
+            )
+            row = result.fetchone()
+            return row.ingested if row else False
+    
+    @classmethod
+    def run(cls, minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
+        """Execute analysis by delegating to analyze_demo()."""
+        return analyze_demo(minio_client, engine, session_id, task_id)
+
+
+# Task handler registry: maps task type to handler class
+TASK_HANDLER_REGISTRY: dict[str, Type[TaskHandler]] = {
+    TASK_COMPRESS: CompressTask,
+    TASK_ANALYZE: AnalyzeTask,
+}
+
+
 def cleanup_old_tasks(engine: Engine) -> int:
     """Remove completed/failed tasks older than TASK_RETENTION_DAYS.
 
@@ -210,16 +405,23 @@ def cleanup_old_tasks(engine: Engine) -> int:
     return count
 
 
-def compress_demo(minio_client: Minio, session_id: str) -> str | None:
+def compress_demo(minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
     """Compress a raw demo from rawblobs to demoblobs.
 
     Args:
         minio_client: MinIO client
+        engine: Database engine
         session_id: Session ID to compress
+        task_id: Task ID for dependency management
 
     Returns:
         Error message or None on success
     """
+    # Wait for analysis if it's already running (analysis may be using raw demo)
+    analysis_status = get_task_status(engine, session_id, TASK_ANALYZE)
+    if analysis_status == STATUS_CLAIMED:
+        depend_on(engine, session_id, TASK_ANALYZE, task_id, wait_on_pending=False)
+
     raw_name = raw_blob_name(session_id)
     compressed_name = demo_blob_name(session_id)
 
@@ -281,16 +483,17 @@ def compress_demo(minio_client: Minio, session_id: str) -> str | None:
     return None
 
 
-def analyze_demo(minio_client: Minio, session_id: str) -> str | None:
+def analyze_demo(minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
     """Download demo, run analysis binary, ingest results.
 
     Steps:
-    1. Download demo from demoblobs (tar.xz)
-    2. Write to temp folder
-    3. Execute analysis binary via subprocess
-    4. Upload analysis JSON to jsonblobs
-    5. Ingest results into DB
-    6. Cleanup temp folder
+    1. Check if compressed demo available; if not, depend_on compress
+    2. Download demo (from demoblobs if available, else rawblobs)
+    3. Write to temp folder
+    4. Execute analysis binary via subprocess
+    5. Upload analysis JSON to jsonblobs
+    6. Ingest results into DB
+    7. Cleanup temp folder
 
     Returns:
         Error message or None on success
@@ -300,22 +503,66 @@ def analyze_demo(minio_client: Minio, session_id: str) -> str | None:
 
     from masterbase.analysis import submit_analysis as ingest_analysis
 
+    # Check if compressed demo is available
+    compressed_available = False
+    try:
+        minio_client.stat_object("demoblobs", demo_blob_name(session_id))
+        compressed_available = True
+    except S3Error:
+        pass
+
+    if not compressed_available:
+        # Compress not done - check if it's running or pending
+        # Wait for compression if it's queued (pending or claimed)
+        compress_status = get_task_status(engine, session_id, TASK_COMPRESS)
+        if compress_status in (STATUS_CLAIMED, STATUS_PENDING):
+            depend_on(engine, session_id, TASK_COMPRESS, task_id, wait_on_pending=True)
+        # If compress task doesn't exist or failed, fall back to rawblobs
+
     work_dir = os.path.join(ANALYSIS_DIR, session_id)
     try:
         os.makedirs(work_dir, exist_ok=True)
 
-        # Download demo from demoblobs
-        demo_name = demo_blob_name(session_id)
-        demo_path = os.path.join(work_dir, demo_name)
-        try:
-            response = minio_client.get_object("demoblobs", demo_name)
+        # Download demo: prefer compressed (demoblobs), fall back to rawblobs
+        demo_path = os.path.join(work_dir, f"{session_id}.dem")
+        downloaded = False
+
+        if compressed_available:
+            compressed_name = demo_blob_name(session_id)
             try:
-                with open(demo_path, "wb") as f:
-                    shutil.copyfileobj(response, f)
-            finally:
-                response.close()
-        except S3Error as e:
-            return f"Failed to download demo: {e}"
+                response = minio_client.get_object("demoblobs", compressed_name)
+                try:
+                    compressed_data = response.read()
+                finally:
+                    response.close()
+                # Decompress tar.xz
+                import tarfile as tf_mod
+                import io as io_mod
+                with tf_mod.open(fileobj=io_mod.BytesIO(compressed_data), mode="r:xz") as tar:
+                    member = tar.extractfile(f"{session_id}.dem")
+                    if member:
+                        with open(demo_path, "wb") as f:
+                            shutil.copyfileobj(member, f)
+                        downloaded = True
+            except S3Error:
+                pass
+
+        if not downloaded:
+            # Fall back to rawblobs
+            raw_name = raw_blob_name(session_id)
+            try:
+                response = minio_client.get_object("rawblobs", raw_name)
+                try:
+                    with open(demo_path, "wb") as f:
+                        shutil.copyfileobj(response, f)
+                finally:
+                    response.close()
+                downloaded = True
+            except S3Error as e:
+                return f"Failed to download demo: {e}"
+
+        if not downloaded:
+            return "Demo not found in demoblobs or rawblobs"
 
         # Run analysis binary
         output_path = os.path.join(work_dir, "analysis.json")
@@ -361,10 +608,6 @@ def analyze_demo(minio_client: Minio, session_id: str) -> str | None:
         except Exception as e:
             return f"Invalid analysis data: {e}"
 
-        # submit_analysis needs engine; get it from the global reference set by cleanup runner
-        engine = _engine_ref
-        if engine is None:
-            return "Engine reference not set"
         error = ingest_analysis(minio_client, engine, session_id, analysis_obj)
         if error:
             return error
@@ -390,10 +633,11 @@ def set_engine_ref(engine: Engine) -> None:
     _engine_ref = engine
 
 
-# Registry of task handlers
-TASK_HANDLERS: dict[str, Callable[[Minio, str], str | None]] = {
-    TASK_COMPRESS: compress_demo,
-    TASK_ANALYZE: analyze_demo,
+# Registry of task handlers: maps task type to handler class.
+# Use handler_cls.run() to execute, handler_cls.is_done() to check completion.
+TASK_HANDLERS: dict[str, Type[TaskHandler]] = {
+    TASK_COMPRESS: CompressTask,
+    TASK_ANALYZE: AnalyzeTask,
 }
 
 
@@ -409,23 +653,25 @@ def process_next_task(engine: Engine, minio_client: Minio, worker_id: str) -> bo
         True if a task was processed, False if no tasks available
     """
     # Try each task type in order of priority
-    for task_type in TASK_HANDLERS:
+    for task_type, handler_cls in TASK_HANDLERS.items():
         task = claim_task(engine, task_type, worker_id)
         if task is None:
             continue
 
         task_id = task["id"]
         session_id = task["session_id"]
-        handler = TASK_HANDLERS[task_type]
 
         logger.info("Processing task %s (%s) for session %s", task_id, task_type, session_id)
 
         try:
-            error = handler(minio_client, session_id)
+            error = handler_cls.run(minio_client, engine, session_id, task_id)
             if error:
                 fail_task(engine, task_id, error)
             else:
                 complete_task(engine, task_id)
+        except TaskDeferred:
+            # Task was reset to pending by depend_on(), don't mark complete/fail
+            logger.debug("Task %s deferred (dependency not ready)", task_id)
         except Exception as e:
             logger.error("Task %s raised exception: %s", task_id, e, exc_info=True)
             fail_task(engine, task_id, str(e))

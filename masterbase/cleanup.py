@@ -17,6 +17,7 @@ from sqlalchemy import Engine
 from masterbase.lib import demo_blob_name, json_blob_name, raw_blob_name
 from masterbase.tasks import (
     TASK_HANDLERS,
+    TaskDeferred,
     cleanup_old_tasks,
     claim_task,
     complete_task,
@@ -614,11 +615,14 @@ class CleanupRunner:
 
         logger.info("Processing task %s (%s) for session %s", task_id, task_type, session_id)
         try:
-            error = handler(self.minio_client, session_id)
+            error = handler.run(self.minio_client, self.engine, session_id, task_id)
             if error:
                 fail_task(self.engine, task_id, error)
             else:
                 complete_task(self.engine, task_id)
+        except TaskDeferred:
+            # Task was reset to pending by depend_on(), don't mark complete/fail
+            logger.debug("Task %s deferred (dependency not ready)", task_id)
         except Exception as e:
             logger.error("Task %s raised exception: %s", task_id, e, exc_info=True)
             fail_task(self.engine, task_id, str(e))
