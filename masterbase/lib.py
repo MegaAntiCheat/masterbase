@@ -43,7 +43,7 @@ def make_db_uri(is_async: bool = False) -> str:
     user = os.environ["POSTGRES_USER"]
     password = os.environ["POSTGRES_PASSWORD"]
     host = os.environ.get("POSTGRES_HOST", "localhost")
-    port = os.environ.get("POSTGRES_PORT", "5432")
+    port = os.environ.get("POSTGRES_PORT_INTERNAL", "5432")
     prefix = "postgresql"
     if is_async:
         prefix = f"{prefix}+asyncpg"
@@ -53,9 +53,10 @@ def make_db_uri(is_async: bool = False) -> str:
 
 def make_minio_client(is_secure: bool = False) -> Minio:
     """Create and return an S3-compatible client handle."""
-    host, port, access_key, secret_key = map(
-        os.getenv, ("MINIO_HOST", "MINIO_PORT", "MINIO_ACCESS_KEY", "MINIO_SECRET_KEY")
-    )
+    host = os.getenv("MINIO_HOST")
+    port = os.getenv("MINIO_PORT_INTERNAL", "9000")
+    access_key = os.getenv("MINIO_ACCESS_KEY")
+    secret_key = os.getenv("MINIO_SECRET_KEY")
     return Minio(f"{host}:{port}", access_key=access_key, secret_key=secret_key, secure=is_secure)
 
 

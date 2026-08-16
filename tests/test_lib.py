@@ -23,7 +23,7 @@ def mock_os_environ(monkeypatch):
     monkeypatch.setenv("POSTGRES_USER", "test_user")
     monkeypatch.setenv("POSTGRES_PASSWORD", "test_password")
     monkeypatch.setenv("POSTGRES_HOST", "test_host")
-    monkeypatch.setenv("POSTGRES_PORT", "8050")
+    monkeypatch.setenv("POSTGRES_PORT_INTERNAL", "8050")
 
 
 @pytest.mark.parametrize(

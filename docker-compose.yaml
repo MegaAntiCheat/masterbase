@@ -8,9 +8,14 @@ services:
     env_file:
       - .env
     ports:
-      - "9000:9000"
+      - "${MINIO_PORT:-9000}:9000"
     volumes:
       - demo_data:/blobs/
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   db:
     build:
@@ -23,9 +28,14 @@ services:
     environment:
       POSTGRES_DB: demos
     ports:
-      - "8050:5432"
+      - "${POSTGRES_PORT:-8050}:5432"
     volumes:
       - db_data:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   api:
     build:
@@ -39,14 +49,18 @@ services:
       - .env
     environment:
       POSTGRES_HOST: db
+      POSTGRES_PORT_INTERNAL: 5432
       MINIO_HOST: minio
+      MINIO_PORT_INTERNAL: 9000
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
       - ${ANALYSIS_BINARY}:/analysis-binary:ro
     depends_on:
-      - minio
-      - db
+      minio:
+        condition: service_healthy
+      db:
+        condition: service_healthy
 
 
 networks:

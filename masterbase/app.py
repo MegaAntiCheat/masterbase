@@ -404,8 +404,11 @@ def provision(request: Request) -> Redirect:
     Returns:
         Redirect to the steam sign in
     """
-    # Use scheme from proxy headers (X-Forwarded-Proto) via request.url
-    base_url = str(request.url.replace(path="/"))
+    # enforce https on base_url
+    base_url = str(request.base_url)
+    dev_mode = os.getenv("DEVELOPMENT", "false")
+    proto = "http://" if dev_mode.lower() == "true" else "https://"
+    base_url = proto + base_url.split("//")[-1]
 
     auth_params = {
         "openid.ns": "http://specs.openid.net/auth/2.0",
@@ -532,7 +535,6 @@ def plain_text_exception_handler(_: Request, exception: Exception) -> Response:
 
 app = Litestar(
     on_startup=startup_registers,
-    proxy_headers=["X-Forwarded-For", "X-Forwarded-Proto"],
     route_handlers=[
         landing,
         session_id,

@@ -9,7 +9,6 @@ from masterbase.cleanup import (
     cleanup_pruned_demos,
     prune_if_necessary,
 )
-from masterbase.tasks import cleanup_old_tasks
 from masterbase.tasks.handlers import TaskHandler
 
 TASK_CLEANUP = "cleanup"
@@ -32,6 +31,9 @@ class CleanupTask(TaskHandler):
     @classmethod
     def run(cls, minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
         """Run all cleanup operations."""
+        # Lazy import to avoid circular dependency
+        from masterbase.tasks import cleanup_old_tasks
+        
         try:
             cleanup_hung_sessions(engine)
             audit_storage_use(engine, minio_client)
