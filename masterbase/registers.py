@@ -1,5 +1,7 @@
 """Functions that register state for the application."""
 
+import logging
+import os
 from typing import cast
 
 from litestar import Litestar
@@ -9,6 +11,54 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from masterbase.taskengine import init_task_runner, start_task_runner, stop_task_runner
 from masterbase.lib import make_db_uri, make_minio_client
+
+logger = logging.getLogger(__name__)
+
+DEVELOPER_API_KEY = "MB-Developer"
+DEVELOPER_STEAM_ID = "0"
+
+
+def manage_developer_key(app: Litestar) -> None:
+    """Add or remove the developer API key based on DEVELOPMENT env var."""
+    engine = app.state.engine
+    development = bool(os.getenv("DEVELOPMENT", "false").lower() == "true")
+
+    with engine.connect() as conn:
+        existing = conn.execute(
+            __import__("sqlalchemy").text(
+                "SELECT api_key FROM api_keys WHERE steam_id = :steam_id"
+            ),
+            {"steam_id": DEVELOPER_STEAM_ID},
+        ).one_or_none()
+
+        if development:
+            if existing is None:
+                conn.execute(
+                    __import__("sqlalchemy").text(
+                        "INSERT INTO api_keys (steam_id, api_key, created_at, updated_at, oid_hash) VALUES (:steam_id, :api_key, NOW(), NOW(), :oid_hash)"
+                    ),
+                    {
+                        "steam_id": DEVELOPER_STEAM_ID,
+                        "api_key": DEVELOPER_API_KEY,
+                        "oid_hash": "developer",
+                    },
+                )
+                conn.commit()
+                logger.info("Added developer API key '%s' for steamid '%s'", DEVELOPER_API_KEY, DEVELOPER_STEAM_ID)
+            else:
+                logger.debug("Developer API key already exists")
+        else:
+            if existing is not None:
+                conn.execute(
+                    __import__("sqlalchemy").text(
+                        "DELETE FROM api_keys WHERE steam_id = :steam_id"
+                    ),
+                    {"steam_id": DEVELOPER_STEAM_ID},
+                )
+                conn.commit()
+                logger.info("Removed developer API key for steamid '%s' (DEVELOPMENT=false)", DEVELOPER_STEAM_ID)
+            else:
+                logger.debug("No developer API key to remove")
 
 
 def get_minio_connection(app: Litestar) -> Minio:
@@ -79,5 +129,5 @@ def shutdown_background_cleanup(app: Litestar) -> None:
     stop_task_runner()
 
 
-startup_registers = (get_db_connection, get_async_db_connection, get_minio_connection, init_background_cleanup)
+startup_registers = (get_db_connection, get_async_db_connection, get_minio_connection, manage_developer_key, init_background_cleanup)
 shutdown_registers = (shutdown_background_cleanup, close_db_connection, close_async_db_connection)

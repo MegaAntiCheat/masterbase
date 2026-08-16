@@ -26,7 +26,7 @@ def upgrade() -> None:
         """
         CREATE TABLE demo_tasks (
             id SERIAL PRIMARY KEY,
-            session_id varchar REFERENCES demo_sessions(session_id),
+            session_id varchar,
             task_type varchar NOT NULL,
             status varchar NOT NULL DEFAULT 'pending',
             priority integer DEFAULT 0,
@@ -36,8 +36,7 @@ def upgrade() -> None:
             error_message text,
             created_at timestamptz DEFAULT NOW(),
             updated_at timestamptz DEFAULT NOW(),
-            completed_at timestamptz,
-            UNIQUE (session_id, task_type)
+            completed_at timestamptz
         );
 
         CREATE INDEX idx_demo_tasks_status_type ON demo_tasks (status, task_type, priority DESC, created_at ASC);

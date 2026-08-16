@@ -72,13 +72,16 @@ class TaskRunner:
         next_cleanup_time = time.time() + CLEANUP_INTERVAL
 
         while self._running and not self._stop_event.is_set():
-            now = time.time()
-            if now >= next_cleanup_time:
-                # Enqueue cleanup as a task instead of running inline
-                enqueue_task(self.engine, None, TASK_CLEANUP)
-                next_cleanup_time = time.time() + CLEANUP_INTERVAL
+            try:
+                now = time.time()
+                if now >= next_cleanup_time:
+                    # Enqueue cleanup as a task instead of running inline
+                    enqueue_task(self.engine, None, TASK_CLEANUP)
+                    next_cleanup_time = time.time() + CLEANUP_INTERVAL
 
-            self._dispatch_tasks()
+                self._dispatch_tasks()
+            except Exception:
+                logger.error("Error in task runner loop", exc_info=True)
 
             # Wait for dispatch signal or 5s fallback for edge cases
             _wait_or_timeout(5)
