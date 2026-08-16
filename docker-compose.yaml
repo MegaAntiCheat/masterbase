@@ -46,6 +46,7 @@ services:
       - ${ANALYSIS_BINARY}:/analysis-binary:ro
     depends_on:
       - minio
+      - db
 
 
 networks:
