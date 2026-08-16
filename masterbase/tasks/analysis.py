@@ -73,7 +73,7 @@ def analyze_demo(minio_client: Minio, engine: Engine, session_id: str, task_id: 
     )
     
     if not os.path.exists(ANALYSIS_BINARY):
-        return "Analysis binary not found - ensure ANALYSIS_BINARY is set correctly in vars.env"
+        return "Analysis binary not found - ensure ANALYSIS_BINARY is set correctly in .env"
 
     from masterbase.analysis import submit_analysis as ingest_analysis
 

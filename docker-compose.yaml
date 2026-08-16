@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   minio:
     build:
@@ -8,11 +6,11 @@ services:
     container_name: ${MINIO_CONTAINER_NAME:-masterbase_minio}
     restart: always
     env_file:
-      - vars.env
+      - .env
     ports:
       - "9000:9000"
     volumes:
-      - ${MINIO_VOLUME_NAME:-demo_data}:/blobs/
+      - demo_data:/blobs/
 
   db:
     build:
@@ -21,13 +19,13 @@ services:
     container_name: ${DB_CONTAINER_NAME:-masterbase_db}
     restart: always
     env_file:
-      - vars.env
+      - .env
     environment:
       POSTGRES_DB: demos
     ports:
       - "8050:5432"
     volumes:
-      - ${DB_VOLUME_NAME:-db_data}:/var/lib/postgresql/data/
+      - db_data:/var/lib/postgresql/data/
 
   api:
     build:
@@ -38,7 +36,7 @@ services:
     container_name: ${API_CONTAINER_NAME:-masterbase_api}
     restart: always
     env_file:
-      - vars.env
+      - .env
     environment:
       POSTGRES_HOST: db
       MINIO_HOST: minio
@@ -51,9 +49,9 @@ services:
 
 
 networks:
-  ${NETWORK_NAME:-network}:
+  network:
     driver: bridge
 
 volumes:
-  ${MINIO_VOLUME_NAME:-demo_data}:
-  ${DB_VOLUME_NAME:-db_data}:
+  demo_data:
+  db_data:
