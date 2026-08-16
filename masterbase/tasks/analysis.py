@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import tarfile
+from typing import ClassVar
 
 import sqlalchemy as sa
 from minio import Minio, S3Error
@@ -23,6 +24,7 @@ class AnalyzeTask(TaskHandler):
     """Handler for analysis tasks."""
     
     task_type = TASK_ANALYZE
+    wait_for: ClassVar[list[str]] = ["compress"]
     
     @classmethod
     def is_done(cls, minio_client: Minio, engine: Engine, session_id: str) -> bool:
@@ -45,22 +47,21 @@ class AnalyzeTask(TaskHandler):
             return row.ingested if row else False
     
     @classmethod
-    def run(cls, minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
+    def run(cls, minio_client: Minio, engine: Engine, session_id: str) -> str | None:
         """Execute analysis by delegating to analyze_demo()."""
-        return analyze_demo(minio_client, engine, session_id, task_id)
+        return analyze_demo(minio_client, engine, session_id)
 
 
-def analyze_demo(minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
+def analyze_demo(minio_client: Minio, engine: Engine, session_id: str) -> str | None:
     """Download demo, run analysis binary, ingest results.
 
     Steps:
-    1. Check if compressed demo available; if not, depend_on compress
-    2. Download demo (from demoblobs if available, else rawblobs)
-    3. Write to temp folder
-    4. Execute analysis binary via subprocess
-    5. Upload analysis JSON to jsonblobs
-    6. Ingest results into DB
-    7. Cleanup temp folder
+    1. Download demo (from demoblobs if available, else rawblobs)
+    2. Write to temp folder
+    3. Execute analysis binary via subprocess
+    4. Upload analysis JSON to jsonblobs
+    5. Ingest results into DB
+    6. Cleanup temp folder
 
     Returns:
         Error message or None on success
@@ -68,8 +69,6 @@ def analyze_demo(minio_client: Minio, engine: Engine, session_id: str, task_id: 
     # Lazy import to avoid circular imports
     from masterbase.tasks import (
         ANALYSIS_BINARY, ANALYSIS_TIMEOUT, ANALYSIS_DIR,
-        STATUS_CLAIMED, STATUS_PENDING, TASK_COMPRESS,
-        depend_on, get_task_status,
     )
     
     if not os.path.exists(ANALYSIS_BINARY):
@@ -84,14 +83,6 @@ def analyze_demo(minio_client: Minio, engine: Engine, session_id: str, task_id: 
         compressed_available = True
     except S3Error:
         pass
-
-    if not compressed_available:
-        # Compress not done - check if it's running or pending
-        # Wait for compression if it's queued (pending or claimed)
-        compress_status = get_task_status(engine, session_id, TASK_COMPRESS)
-        if compress_status in (STATUS_CLAIMED, STATUS_PENDING):
-            depend_on(engine, session_id, TASK_COMPRESS, task_id, wait_on_pending=True)
-        # If compress task doesn't exist or failed, fall back to rawblobs
 
     work_dir = os.path.join(ANALYSIS_DIR, session_id)
     try:

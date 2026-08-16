@@ -278,7 +278,7 @@ async def demodata_raw(request: Request, api_key: str, session_id: str) -> Strea
     return Stream(io.BytesIO(demo_bytes), media_type=MediaType.TEXT, headers=headers)
 
 
-@get("/db_export", guards=[valid_key_guard, analyst_guard])
+@get("/db_export", guards=[valid_key_guard, analyst_guard], sync_to_thread=False)
 def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
     """Return a database export of the requested `table`."""
     engine = request.app.state.engine

@@ -5,6 +5,7 @@ import os
 import threading
 
 import sqlalchemy as sa
+from minio import Minio
 from sqlalchemy import Engine
 
 from masterbase.tasks.handlers import TaskHandler
@@ -37,15 +38,6 @@ STATUS_SKIPPED = "skipped"
 TASK_RETENTION_DAYS = 7
 
 
-class TaskDeferred(Exception):
-    """Raised when a task resets itself to pending via depend_on().
-    
-    The worker catches this and skips complete/fail since the task
-    was already reset to pending in the DB.
-    """
-    pass
-
-
 # Thread pool size
 TASK_WORKER_THREADS = int(os.getenv("TASK_WORKER_THREADS", "4"))
 
@@ -69,57 +61,72 @@ ANALYSIS_TIMEOUT = int(os.getenv("ANALYSIS_TIMEOUT", "3600"))
 MEDIA_DIR = "/media"
 ANALYSIS_DIR = os.path.join(MEDIA_DIR, "analysis")
 
-
-def depend_on(
-    engine: Engine, session_id: str, dep_type: str, my_task_id: int,
-    wait_on_pending: bool = True
-) -> bool:
-    """Check if a dependency task is satisfied.
+def wait_for_tasks(minio_client: Minio, engine: Engine, session_id: str, dep_types: list[str]) -> bool:
+    """Check if all dependency tasks are satisfied for a given session.
     
-    If the dependency is completed, returns True.
-    If the dependency is running (claimed) or pending (when wait_on_pending=True),
-    ensures it's queued and resets this task to pending so the scheduler processes
-    the dependency first.
+    For each dependency task type:
+    1. Check the task table for a completed/skipped row (fast path cache).
+    2. If found, the dependency is satisfied.
+    3. If not found, run the handler's is_done() check to determine actual state.
+    4. If the work is actually done but we don't have a cache row, create a skipped
+       task row to cache this result for future dependency checks.
+    5. If the work is not done, return False (caller should defer).
     
     Args:
+        minio_client: MinIO client
         engine: Database engine
         session_id: Session ID
-        dep_type: Dependency task type (e.g., TASK_COMPRESS)
-        my_task_id: ID of this task (to reset if waiting)
-        wait_on_pending: If True, wait on both pending AND claimed tasks.
-                        If False, only wait on claimed (running) tasks.
+        dep_types: List of task type strings that must complete first
     
     Returns:
-        True if dependency is satisfied and task can proceed.
-        Raises TaskDeferred if task was reset to pending and should wait.
+        True if all dependencies are satisfied and task can proceed.
+        False if any dependency is not yet complete.
     """
-    status = get_task_status(engine, session_id, dep_type)
-    if status in (STATUS_COMPLETED, STATUS_SKIPPED):
+    if not dep_types:
         return True
-    # Check if we should wait based on status and wait_on_pending flag
-    should_wait = False
-    if status == STATUS_CLAIMED:
-        # Always wait if dependency is running
-        should_wait = True
-    elif status == STATUS_PENDING and wait_on_pending:
-        # Wait if dependency is pending and we're configured to wait on pending
-        should_wait = True
     
-    if should_wait:
-        # Ensure dependency is queued (idempotent)
-        enqueue_task(engine, session_id, dep_type)
-        # Reset this task to pending
-        reset_task_to_pending(engine, my_task_id)
-        logger.info(
-            "Task %s waiting for %s (status=%s), reset to pending",
-            my_task_id, dep_type, status,
+    for dep_type in dep_types:
+        # Fast path: check task table for completed/skipped status
+        status = get_task_status(engine, session_id, dep_type)
+        if status in (STATUS_COMPLETED, STATUS_SKIPPED):
+            continue  # Already cached as done
+        
+        # No cache row or not completed - do the actual check
+        # Look up the handler for this dependency type
+        dep_handler = TASK_HANDLERS.get(dep_type)
+        if dep_handler and dep_handler.is_done(minio_client, engine, session_id):
+            # Work is actually done but we don't have a completed row.
+            # Create a skipped task row to cache this for future checks.
+            with engine.begin() as conn:
+                conn.execute(
+                    sa.text(
+                        """
+                        INSERT INTO demo_tasks (session_id, task_type, status, completed_at, updated_at)
+                        VALUES (:session_id, :task_type, :status, NOW(), NOW())
+                        ON CONFLICT DO NOTHING;
+                        """
+                    ),
+                    {
+                        "session_id": session_id,
+                        "task_type": dep_type,
+                        "status": STATUS_SKIPPED,
+                    },
+                )
+            logger.info(
+                "Cached %s as skipped for session %s (work already done)",
+                dep_type, session_id,
+            )
+            continue
+        
+        # Dependency not satisfied
+        logger.debug(
+            "Session %s: dependency %s not satisfied (status=%s)",
+            session_id, dep_type, status,
         )
-        raise TaskDeferred
+        return False
     
-    # Dependency is not blocking (e.g., failed, missing, or pending with wait_on_pending=False)
-    # Ensure it's queued so it can run
-    enqueue_task(engine, session_id, dep_type)
     return True
+
 
 
 def enqueue_task(engine: Engine, session_id: str | None, task_type: str, priority: int = 0) -> int:
@@ -168,6 +175,9 @@ def enqueue_task(engine: Engine, session_id: str | None, task_type: str, priorit
 def claim_task(engine: Engine, task_type: str, worker_id: str) -> dict | None:
     """Atomically claim a pending task.
 
+    Only claims if no other task is currently running (CLAIMED) for the same session,
+    ensuring only one task type runs per session at a time.
+
     Args:
         engine: Database engine
         task_type: Type of task to claim
@@ -185,6 +195,10 @@ def claim_task(engine: Engine, task_type: str, worker_id: str) -> dict | None:
                 WHERE id = (
                     SELECT id FROM demo_tasks
                     WHERE status = :pending AND task_type = :task_type
+                      AND session_id NOT IN (
+                          SELECT session_id FROM demo_tasks
+                          WHERE status = :claimed AND session_id IS NOT NULL
+                      )
                     ORDER BY priority + EXTRACT(EPOCH FROM NOW() - created_at) / :age_rate DESC
                     LIMIT 1
                 )
@@ -303,28 +317,6 @@ def get_task_status(engine: Engine, session_id: str, task_type: str) -> str | No
         )
         row = result.fetchone()
         return row.status if row else None
-
-
-def reset_task_to_pending(engine: Engine, task_id: int) -> None:
-    """Reset a claimed task back to pending so the scheduler can re-dispatch it.
-    
-    Decrements priority by 1 so deferred tasks don't immediately re-claim
-    ahead of others, but age-based ordering (TASK_AGE_RATE) ensures they
-    eventually catch up.
-    """
-    with engine.begin() as conn:
-        conn.execute(
-            sa.text(
-                """
-                UPDATE demo_tasks
-                SET status = :pending, worker_id = NULL, updated_at = NOW(),
-                    priority = priority - 1
-                WHERE id = :id;
-                """
-            ),
-            {"pending": STATUS_PENDING, "id": task_id},
-        )
-    signal_dispatch()
 
 
 def cleanup_old_tasks(engine: Engine) -> int:

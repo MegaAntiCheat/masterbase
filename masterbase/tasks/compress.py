@@ -29,33 +29,22 @@ class CompressTask(TaskHandler):
             return False
     
     @classmethod
-    def run(cls, minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
+    def run(cls, minio_client: Minio, engine: Engine, session_id: str) -> str | None:
         """Execute compression by delegating to compress_demo()."""
-        return compress_demo(minio_client, engine, session_id, task_id)
+        return compress_demo(minio_client, engine, session_id)
 
 
-def compress_demo(minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
+def compress_demo(minio_client: Minio, engine: Engine, session_id: str) -> str | None:
     """Compress a raw demo from rawblobs to demoblobs.
 
     Args:
         minio_client: MinIO client
         engine: Database engine
         session_id: Session ID to compress
-        task_id: Task ID for dependency management
 
     Returns:
         Error message or None on success
     """
-    # Lazy import to avoid circular imports
-    from masterbase.tasks import (
-        STATUS_CLAIMED, TASK_ANALYZE, depend_on, get_task_status,
-    )
-    
-    # Wait for analysis if it's already running (analysis may be using raw demo)
-    analysis_status = get_task_status(engine, session_id, TASK_ANALYZE)
-    if analysis_status == STATUS_CLAIMED:
-        depend_on(engine, session_id, TASK_ANALYZE, task_id, wait_on_pending=False)
-
     raw_name = raw_blob_name(session_id)
     compressed_name = demo_blob_name(session_id)
 

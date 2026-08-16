@@ -12,7 +12,6 @@ from sqlalchemy import Engine
 import sqlalchemy as sa
 from masterbase.tasks import (
     TASK_HANDLERS,
-    TaskDeferred,
     _wait_or_timeout,
     cleanup_old_tasks,
     claim_task,
@@ -21,6 +20,7 @@ from masterbase.tasks import (
     fail_task,
     signal_dispatch,
     skip_task,
+    wait_for_tasks,
     TASK_CLEANUP,
     TASK_WORKER_THREADS,
 )
@@ -175,24 +175,57 @@ class TaskRunner:
             skip_task(self.engine, task_id)
             return
 
+        # Check dependencies (wait_for) before executing
+        if not wait_for_tasks(self.minio_client, self.engine, session_id, handler.wait_for):
+            # Dependencies not ready - reset to pending so the scheduler
+            # can re-claim this task later once dependencies are satisfied.
+            logger.debug(
+                "Task %s (%s) deferred: dependencies not ready for session %s",
+                task_id, task_type, session_id,
+            )
+            _reset_to_pending(self.engine, task_id)
+            return
+
         logger.info("Processing task %s (%s) for session %s", task_id, task_type, session_id)
+        failed = False
         try:
-            error = handler.run(self.minio_client, self.engine, session_id, task_id)
+            error = handler.run(self.minio_client, self.engine, session_id)
             if error:
                 fail_task(self.engine, task_id, error)
+                failed = True
             else:
                 complete_task(self.engine, task_id)
-        except TaskDeferred:
-            # Task was reset to pending by depend_on(), don't mark complete/fail
-            logger.debug("Task %s deferred (dependency not ready)", task_id)
         except Exception as e:
             logger.error("Task %s raised exception: %s", task_id, e, exc_info=True)
             fail_task(self.engine, task_id, str(e))
+            failed = True
         finally:
             with self._running_lock:
                 self._running_counts[task_type] = max(0, self._running_counts.get(task_type, 0) - 1)
             # Signal dispatch so the scheduler knows a thread slot is free
-            signal_dispatch()
+            # Don't signal on failure to avoid tight retry loops
+            if not failed:
+                signal_dispatch()
+
+
+def _reset_to_pending(engine: Engine, task_id: int) -> None:
+    """Reset a claimed task back to pending so the scheduler can re-dispatch it.
+
+    Decrements priority by 1 so deferred tasks don't immediately re-claim
+    ahead of others, but age-based ordering ensures they eventually catch up.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                """
+                UPDATE demo_tasks
+                SET status = :pending, worker_id = NULL, updated_at = NOW(),
+                    priority = priority - 1
+                WHERE id = :id;
+                """
+            ),
+            {"pending": "pending", "id": task_id},
+        )
 
 
 # Module-level singleton for easy access

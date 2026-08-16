@@ -36,7 +36,8 @@ def upgrade() -> None:
             error_message text,
             created_at timestamptz DEFAULT NOW(),
             updated_at timestamptz DEFAULT NOW(),
-            completed_at timestamptz
+            completed_at timestamptz,
+            UNIQUE (session_id, task_type)
         );
 
         CREATE INDEX idx_demo_tasks_status_type ON demo_tasks (status, task_type, priority DESC, created_at ASC);
