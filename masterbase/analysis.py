@@ -1,24 +1,24 @@
 """Analysis ingestion logic."""
 
 import io
-import json
+import logging
 from datetime import datetime, timezone
 
 import sqlalchemy as sa
 from minio import Minio
-from pydantic import ValidationError
 from sqlalchemy import Engine
-from sqlalchemy.ext.asyncio import AsyncEngine
 
 from masterbase.models import Analysis
 from masterbase.lib import json_blob_name
 
+logger = logging.getLogger(__name__)
+
 
 def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
     """Get a list of demos that need analysis.
-    
-    Returns sessions that are closed, not pruned, and not yet analyzed
-    in the pipeline.
+
+    Returns sessions that are closed, not pruned, not yet analyzed,
+    and not claimed by an external client.
     """
     sql = """
         SELECT
@@ -26,12 +26,15 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
         FROM
             demo_sessions ds
         LEFT JOIN demo_pipeline dp ON ds.session_id = dp.session_id
+        LEFT JOIN demo_claims dc ON ds.session_id = dc.session_id
+            AND dc.state IN ('active', 'released')
         WHERE
             ds.active = false
             AND ds.open = false
             AND ds.pruned = false
             AND ds.demo_size > 0
             AND (dp.analyzed IS NULL OR dp.analyzed = false)
+            AND dc.session_id IS NULL
         ORDER BY
             ds.created_at ASC
         LIMIT :limit;
@@ -48,6 +51,88 @@ def get_uningested_demos(engine: Engine, limit: int) -> list[str]:
         uningested_demos = [row[0] for row in data]
 
         return uningested_demos
+
+
+def claim_session(engine: Engine, session_id: str, client_ip: str) -> bool:
+    """Claim a session for external analysis.
+
+    Creates an active claim if the session is not already claimed/released
+    or already analyzed. Uses FOR UPDATE to atomically check and claim.
+    Returns True if claim created, False otherwise.
+    """
+    with engine.begin() as conn:
+        # Check if already analyzed
+        result = conn.execute(
+            sa.text(
+                "SELECT analyzed FROM demo_pipeline WHERE session_id = :sid FOR UPDATE;"
+            ),
+            {"sid": session_id},
+        ).fetchone()
+        if result is None or result.analyzed:
+            return False
+
+        # Check for existing claim (active or released)
+        claim = conn.execute(
+            sa.text(
+                "SELECT state FROM demo_claims WHERE session_id = :sid;"
+            ),
+            {"sid": session_id},
+        ).fetchone()
+        if claim is not None:
+            return False
+
+        # Create claim
+        conn.execute(
+            sa.text(
+                """
+                INSERT INTO demo_claims (session_id, client_ip, state, claimed_at)
+                VALUES (:sid, :ip, 'active', NOW());
+                """
+            ),
+            {"sid": session_id, "ip": client_ip},
+        )
+    logger.info("Session %s claimed by %s", session_id, client_ip)
+    return True
+
+
+def release_expired_claims(engine: Engine, timeout_minutes: int) -> int:
+    """Release claims that have exceeded the timeout.
+
+    Sets state to 'released' and records released_at timestamp.
+    Returns the number of claims released.
+    """
+    with engine.begin() as conn:
+        result = conn.execute(
+            sa.text(
+                """
+                UPDATE demo_claims
+                SET state = 'released', released_at = NOW()
+                WHERE state = 'active'
+                    AND claimed_at < NOW() - make_interval(mins => :min)
+                RETURNING session_id;
+                """
+            ),
+            {"min": timeout_minutes},
+        )
+        count = len(result.fetchall())
+    if count:
+        logger.info("Released %d expired claims", count)
+    return count
+
+
+def remove_claim(engine: Engine, session_id: str) -> None:
+    """Remove a claim row entirely (used after analysis is complete).
+
+    This is called when the demo is analyzed (internally or externally)
+    to clean up the claim record.
+    """
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                "DELETE FROM demo_claims WHERE session_id = :sid;"
+            ),
+            {"sid": session_id},
+        )
 
 
 def _check_session_ready(conn, session_id: str) -> str | None:
@@ -95,76 +180,6 @@ def _check_session_ready(conn, session_id: str) -> str | None:
     if row.open:
         return "session is still open"
     return None
-
-
-def ingest_demos(minio_client: Minio, engine: Engine, session_ids: list[str]) -> dict[str, str | None]:
-    """Ingest a list of demos from an analysis client."""
-
-    # preprocessing of data
-    results = dict[str, Analysis]()
-    errors = dict[str, str | None]()
-    for session_id in session_ids:
-        result = ingest_preprocess_analysis(minio_client, session_id)
-        if result is str:
-            errors[session_id] = result
-        else:
-            results[session_id] = result
-            errors[session_id] = None
-
-    # SQL query to wipe existing analysis data
-    wipe_analysis_sql = "DELETE FROM analysis WHERE session_id = ANY(:session_ids);"
-
-    # SQL query to insert the analysis data
-    insert_sql = """\
-        INSERT INTO analysis (
-            session_id, target_steam_id, algorithm_type, detection_count, created_at
-        ) VALUES (
-            :session_id, :target_steam_id, :algorithm, :count, :created_at
-        );
-    """
-
-    created_at = datetime.now().astimezone(timezone.utc).isoformat()
-
-    ingestable_results = dict[str, dict[str, int]]()
-
-    # Check each demo is actually ingestable
-    with engine.begin() as conn:
-        for session_id in list(results.keys()):
-            error = _check_session_ready(conn, session_id)
-            if error:
-                errors[session_id] = error
-            else:
-                ingestable_results[session_id] = results[session_id]
-
-    results = ingestable_results
-
-    from masterbase.tasks import TASK_ANALYZE, mark_stage_done
-
-    with engine.begin() as conn:
-        result_list = list(results.keys())
-        conn.execute(
-            sa.text(wipe_analysis_sql),
-            {"session_ids": result_list},
-        )
-
-        for session_id, algorithm_counts in results.items():
-            for key, count in algorithm_counts.items():
-                conn.execute(
-                    sa.text(insert_sql),
-                    {
-                        "session_id": session_id,
-                        "target_steam_id": key[0],
-                        "algorithm": key[1],
-                        "count": count,
-                        "created_at": created_at,
-                    },
-                )
-
-        # Mark all as analyzed in pipeline
-        for session_id in result_list:
-            mark_stage_done(engine, session_id, TASK_ANALYZE)
-
-    return errors
 
 
 AnalysisSummary = dict[tuple[str, str], int]
@@ -232,5 +247,8 @@ def submit_analysis(
         # Mark as analyzed in pipeline
         from masterbase.tasks import TASK_ANALYZE, mark_stage_done
         mark_stage_done(engine, session_id, TASK_ANALYZE)
+
+        # Clean up claim if exists
+        remove_claim(engine, session_id)
 
     return None

@@ -23,7 +23,7 @@ depends_on: Union[str, Sequence[str, None]] = None
 
 
 def upgrade() -> None:
-    """Create demo_pipeline table, drop demo_tasks, remove ingested from demo_sessions."""
+    """Create demo_pipeline and demo_claims tables, drop demo_tasks, remove ingested from demo_sessions."""
     op.execute(
         """
         CREATE TABLE demo_pipeline (
@@ -50,12 +50,21 @@ def upgrade() -> None:
 
         -- Remove ingested column from demo_sessions
         ALTER TABLE demo_sessions DROP COLUMN IF EXISTS ingested;
+
+        -- Create demo_claims table for external analysis client claims
+        CREATE TABLE demo_claims (
+            session_id varchar PRIMARY KEY REFERENCES demo_pipeline(session_id),
+            client_ip inet NOT NULL,
+            state varchar NOT NULL DEFAULT 'active',
+            claimed_at timestamptz NOT NULL DEFAULT NOW(),
+            released_at timestamptz
+        );
         """
     )
 
 
 def downgrade() -> None:
-    """Restore demo_tasks table, restore ingested column, drop demo_pipeline."""
+    """Restore demo_tasks table, restore ingested column, drop demo_pipeline and demo_claims."""
     op.execute(
         """
         CREATE TABLE demo_tasks (
@@ -86,6 +95,7 @@ def downgrade() -> None:
         FROM demo_pipeline dp
         WHERE demo_sessions.session_id = dp.session_id;
 
+        DROP TABLE IF EXISTS demo_claims;
         DROP TABLE IF EXISTS demo_pipeline;
         """
     )

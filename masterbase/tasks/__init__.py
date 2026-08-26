@@ -33,6 +33,9 @@ TASK_WORKER_THREADS = int(os.getenv("TASK_WORKER_THREADS", "4"))
 # Cleanup interval (seconds) - 15 minutes
 CLEANUP_INTERVAL = int(os.getenv("CLEANUP_INTERVAL_SECONDS", "900"))
 
+# Claim timeout in minutes — external clients have this long to submit analysis
+CLAIM_TIMEOUT_MINUTES = int(os.getenv("CLAIM_TIMEOUT_MINUTES", "10"))
+
 # Pipeline stages in order. Each stage maps to a boolean column in demo_pipeline.
 # The runner processes sessions by finding the first stage that is False.
 TASK_ORDER = [TASK_COMPRESS, TASK_ANALYZE]
@@ -126,18 +129,20 @@ def get_next_stage(engine: Engine, session_id: str) -> str | None:
 
 def get_work_item(engine: Engine) -> tuple[str, str] | None:
     """Get the next session+stage to work on.
-    
+
     Uses FOR UPDATE SKIP LOCKED to allow parallel workers without conflicts.
+    Skips sessions that have an active external claim.
     Returns (session_id, stage) or None if no work available.
     """
-    # Find sessions with pending work, oldest first
     with engine.begin() as conn:
         result = conn.execute(
             sa.text(
                 """
-                SELECT session_id, compressed, analyzed FROM demo_pipeline
-                WHERE compressed = false OR analyzed = false
-                ORDER BY created_at ASC
+                SELECT dp.session_id, dp.compressed, dp.analyzed FROM demo_pipeline dp
+                LEFT JOIN demo_claims dc ON dp.session_id = dc.session_id AND dc.state = 'active'
+                WHERE (dp.compressed = false OR dp.analyzed = false)
+                    AND dc.session_id IS NULL
+                ORDER BY dp.created_at ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED;
                 """
@@ -146,17 +151,17 @@ def get_work_item(engine: Engine) -> tuple[str, str] | None:
         row = result.fetchone()
         if row is None:
             return None
-        
+
         session_id = row.session_id
         compressed, analyzed = row.compressed, row.analyzed
-        
+
         # Determine next stage based on TASK_ORDER
         for stage in TASK_ORDER:
             if stage == TASK_COMPRESS and not compressed:
                 return (session_id, stage)
             if stage == TASK_ANALYZE and not analyzed:
                 return (session_id, stage)
-    
+
     return None
 
 

@@ -24,7 +24,7 @@ from sqlalchemy.exc import IntegrityError
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(CURRENT_DIR))
 
-from masterbase.analysis import get_uningested_demos, ingest_demos
+from masterbase.analysis import get_uningested_demos, claim_session
 from masterbase.anomaly import DetectionState
 from masterbase.guards import (
     analyst_guard,
@@ -294,11 +294,23 @@ def db_export(request: Request, api_key: str, table: ExportTable) -> Stream:
 
 @get("/jobs", guards=[valid_key_guard, analyst_guard])
 async def jobs(request: Request, api_key: str, limit: int = 1) -> list[str]:
-    """Return a list of demos that need analysis."""
+    """Return a list of demos that need analysis.
+
+    Each returned session is claimed for the requesting client.
+    Claims expire after a timeout if analysis is not submitted.
+    """
+    from masterbase.tasks import CLAIM_TIMEOUT_MINUTES
+
     engine = request.app.state.engine
     demos = get_uningested_demos(engine, limit)
 
-    return demos
+    claimed = []
+    client_ip = request.client.host if request.client else "unknown"
+    for session_id in demos:
+        if claim_session(engine, session_id, client_ip):
+            claimed.append(session_id)
+
+    return claimed
 
 
 @post("/analysis", guards=[valid_key_guard, analyst_guard])
