@@ -6,12 +6,8 @@ import logging
 import os
 import shutil
 import subprocess
-import tarfile
-from typing import ClassVar
 
-import sqlalchemy as sa
 from minio import Minio, S3Error
-from sqlalchemy import Engine
 
 from masterbase.lib import demo_blob_name, json_blob_name, raw_blob_name
 from masterbase.tasks.handlers import TaskHandler
@@ -20,39 +16,19 @@ TASK_ANALYZE = "analyze"
 
 logger = logging.getLogger(__name__)
 
+
 class AnalyzeTask(TaskHandler):
     """Handler for analysis tasks."""
     
     task_type = TASK_ANALYZE
-    wait_for: ClassVar[list[str]] = ["compress"]
-    
+
     @classmethod
-    def is_done(cls, minio_client: Minio, engine: Engine, session_id: str) -> bool:
-        """Check if analysis has already been ingested for this session.
-        
-        Checks the ingested flag in demo_sessions, which is set when analysis
-        results are successfully ingested (either internally or via external client).
-        """
-        with engine.connect() as conn:
-            result = conn.execute(
-                sa.text(
-                    """
-                    SELECT ingested FROM demo_sessions
-                    WHERE session_id = :session_id;
-                    """
-                ),
-                {"session_id": session_id},
-            )
-            row = result.fetchone()
-            return row.ingested if row else False
-    
-    @classmethod
-    def run(cls, minio_client: Minio, engine: Engine, session_id: str) -> str | None:
+    def run(cls, minio_client: Minio, engine, session_id: str) -> str | None:
         """Execute analysis by delegating to analyze_demo()."""
         return analyze_demo(minio_client, engine, session_id)
 
 
-def analyze_demo(minio_client: Minio, engine: Engine, session_id: str) -> str | None:
+def analyze_demo(minio_client: Minio, engine, session_id: str) -> str | None:
     """Download demo, run analysis binary, ingest results.
 
     Steps:
@@ -66,7 +42,6 @@ def analyze_demo(minio_client: Minio, engine: Engine, session_id: str) -> str | 
     Returns:
         Error message or None on success
     """
-    # Lazy import to avoid circular imports
     from masterbase.tasks import (
         ANALYSIS_BINARY, ANALYSIS_TIMEOUT, ANALYSIS_DIR,
     )

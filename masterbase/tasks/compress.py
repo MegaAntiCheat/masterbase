@@ -14,32 +14,23 @@ TASK_COMPRESS = "compress"
 
 logger = logging.getLogger(__name__)
 
+
 class CompressTask(TaskHandler):
     """Handler for compression tasks."""
     
     task_type = TASK_COMPRESS
-    
-    @classmethod
-    def is_done(cls, minio_client: Minio, engine: Engine, session_id: str) -> bool:
-        """Check if the compressed demo blob already exists in demoblobs."""
-        try:
-            minio_client.stat_object("demoblobs", demo_blob_name(session_id))
-            return True
-        except S3Error:
-            return False
-    
+
     @classmethod
     def run(cls, minio_client: Minio, engine: Engine, session_id: str) -> str | None:
         """Execute compression by delegating to compress_demo()."""
-        return compress_demo(minio_client, engine, session_id)
+        return compress_demo(minio_client, session_id)
 
 
-def compress_demo(minio_client: Minio, engine: Engine, session_id: str) -> str | None:
+def compress_demo(minio_client: Minio, session_id: str) -> str | None:
     """Compress a raw demo from rawblobs to demoblobs.
 
     Args:
         minio_client: MinIO client
-        engine: Database engine
         session_id: Session ID to compress
 
     Returns:

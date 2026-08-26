@@ -310,7 +310,7 @@ async def submit_analysis(request: Request, api_key: str, data: AnalysisBody) ->
     engine = request.app.state.engine
     error = ingest_single(minio_client, engine, data.session_id, data.analysis)
     
-    return {"session_id": data.session_id, "ingested": error is None}
+    return {"session_id": data.session_id, "analyzed": error is None}
 
 
 @post("/report", guards=[valid_key_guard])

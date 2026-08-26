@@ -1,4 +1,4 @@
-"""Cleanup task handler - singleton task for periodic storage maintenance."""
+"""Cleanup task handler - periodic storage maintenance."""
 
 from minio import Minio
 from sqlalchemy import Engine
@@ -17,29 +17,18 @@ TASK_CLEANUP = "cleanup"
 class CleanupTask(TaskHandler):
     """Handler for periodic cleanup tasks.
     
-    This is a singleton task - only one instance exists at a time,
-    independent of any demo session.
+    This is a singleton task - not tied to any demo session.
     """
     task_type = TASK_CLEANUP
-    singleton = True
-    
+
     @classmethod
-    def is_done(cls, minio_client: Minio, engine: Engine, session_id: str) -> bool:
-        """Cleanup is never pre-done - it always needs to run."""
-        return False
-    
-    @classmethod
-    def run(cls, minio_client: Minio, engine: Engine, session_id: str, task_id: int) -> str | None:
+    def run(cls, minio_client: Minio, engine: Engine, session_id: str) -> str | None:
         """Run all cleanup operations."""
-        # Lazy import to avoid circular dependency
-        from masterbase.tasks import cleanup_old_tasks
-        
         try:
             cleanup_hung_sessions(engine)
             audit_storage_use(engine, minio_client)
             prune_if_necessary(engine, minio_client)
             cleanup_pruned_demos(engine, minio_client)
-            cleanup_old_tasks(engine)
         except Exception as e:
             return str(e)
         return None

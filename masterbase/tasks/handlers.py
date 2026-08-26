@@ -1,43 +1,20 @@
-"""Base class for task handlers."""
-
-from typing import ClassVar
+"""Base class for pipeline task handlers."""
 
 from minio import Minio
 from sqlalchemy import Engine
 
 
 class TaskHandler:
-    """Base class for task handlers.
+    """Base class for pipeline task handlers.
     
-    Subclasses implement is_done() to check if work is already complete
-    (by inspecting artifacts in MinIO/DB), and run() for the task logic.
-    This avoids duplicating "is this done?" checks across multiple handlers.
+    Each handler represents one stage in the pipeline (compress, analyze, etc.).
+    The pipeline order is defined in TASK_ORDER in __init__.py.
     
-    Uses wait_for to declare which task types must complete before this one
-    activates for a given session_id.
+    Subclasses implement run() for the task logic. The runner checks the
+    boolean column in demo_pipeline to determine if work is already done.
     """
     
-    task_type: str
-    singleton: bool = False  # If True, task is global (not per-demo); uses sentinel session_id
-    
-    # List of task type strings that must complete before this task type
-    # activates for a given session_id. Checked against completed tasks in
-    # the task table first, then actual artifact checks. Skipped task rows
-    # are created for caching future dependency checks.
-    wait_for: ClassVar[list[str]] = []
-    
-    @classmethod
-    def is_done(cls, minio_client: Minio, engine: Engine, session_id: str) -> bool:
-        """Check if this task's work is already done for the given session.
-        
-        Subclasses should check the actual artifacts (MinIO blobs, DB records)
-        rather than the task queue status, as a task may have completed without
-        ever being enqueued (e.g., external ingestion, manual operations).
-        
-        Returns:
-            True if the work is already done and the task can be skipped.
-        """
-        raise NotImplementedError
+    task_type: str  # "compress", "analyze", etc.
     
     @classmethod
     def run(cls, minio_client: Minio, engine: Engine, session_id: str) -> str | None:

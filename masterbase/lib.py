@@ -341,7 +341,6 @@ def start_session_helper(
                     fake_ip,
                     map,
                     steam_api_data,
-                    ingested,
                     created_at,
                     updated_at
                 ) VALUES (
@@ -355,7 +354,6 @@ def start_session_helper(
                     :fake_ip,
                     :map,
                     :steam_api_data,
-                    :ingested,
                     :created_at,
                     :updated_at
                 );
@@ -372,7 +370,6 @@ def start_session_helper(
                 "fake_ip": fake_ip,
                 "map": map_str,
                 "steam_api_data": None,
-                "ingested": False,
                 "created_at": datetime.now().astimezone(timezone.utc).isoformat(),
                 "updated_at": datetime.now().astimezone(timezone.utc).isoformat(),
             },
@@ -416,7 +413,7 @@ def _close_session_with_demo(
 
     Compression to tar.xz happens asynchronously via the background task queue.
     """
-    from masterbase.tasks import TASK_ANALYZE, TASK_COMPRESS, enqueue_task
+    from masterbase.tasks import add_to_pipeline
 
     sink_path = demo_sink_path(session_id)
     size = os.stat(sink_path).st_size
@@ -470,10 +467,11 @@ def _close_session_with_demo(
             minio_client.fput_object("rawblobs", raw_blob_name(session_id), file_path=sink_path)
         conn.commit()
 
-    # Enqueue compression task
-    enqueue_task(engine, session_id, TASK_COMPRESS)
-    # Enqueue analysis task
-    enqueue_task(engine, session_id, TASK_ANALYZE)
+    # Add session to the pipeline (compress → analyze)
+    add_to_pipeline(engine, session_id)
+    # Signal the runner to pick up new work
+    from masterbase.tasks import signal_dispatch
+    signal_dispatch()
 
 
 def close_session_helper(
