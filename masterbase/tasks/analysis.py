@@ -146,18 +146,17 @@ def analyze_demo(minio_client: Minio, engine, session_id: str) -> str | None:
         try:
             analysis_obj = Analysis(**analysis_data)
         except Exception as e:
+            # Cleanup on error to avoid leaving partial state
+            shutil.rmtree(work_dir, ignore_errors=True)
             return f"Invalid analysis data: {e}"
 
         error = ingest_analysis(minio_client, engine, session_id, analysis_obj)
         if error:
+            # Cleanup on error to avoid leaving partial state
+            shutil.rmtree(work_dir, ignore_errors=True)
             return error
 
+        # Success - cleanup temp folder
+        shutil.rmtree(work_dir, ignore_errors=True)
         logger.info("Analyzed demo %s successfully", session_id)
         return None
-
-    finally:
-        # Cleanup temp folder
-        try:
-            shutil.rmtree(work_dir, ignore_errors=True)
-        except Exception as e:
-            logger.warning("Failed to cleanup analysis temp dir %s: %s", work_dir, e)
