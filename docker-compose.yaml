@@ -52,6 +52,9 @@ services:
       POSTGRES_PORT_INTERNAL: 5432
       MINIO_HOST: minio
       MINIO_PORT_INTERNAL: 9000
+      # Optional override; if unset, start.sh detects the compose network
+      # gateway dynamically (needed for uvicorn to honour X-Forwarded-*).
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-}
     ports:
       - "${API_PORT:-8000}:8000"
     volumes:
