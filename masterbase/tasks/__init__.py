@@ -38,7 +38,13 @@ CLAIM_TIMEOUT_MINUTES = int(os.getenv("CLAIM_TIMEOUT_MINUTES", "10"))
 
 # Pipeline stages in order. Each stage maps to a boolean column in demo_pipeline.
 # The runner processes sessions by finding the first stage that is False.
-TASK_ORDER = [TASK_COMPRESS, TASK_ANALYZE]
+TASK_ORDER = [TASK_ANALYZE, TASK_COMPRESS]
+
+# Maps stage names to their boolean columns in demo_pipeline.
+TASK_COLUMNS: dict[str, str] = {
+    TASK_COMPRESS: "compressed",
+    TASK_ANALYZE: "analyzed",
+}
 
 # Task handler registry: maps task type to handler class
 TASK_HANDLERS: dict[str, type[TaskHandler]] = {
@@ -167,7 +173,7 @@ def get_work_item(engine: Engine) -> tuple[str, str] | None:
 
 def mark_stage_done(engine: Engine, session_id: str, stage: str) -> None:
     """Mark a pipeline stage as complete."""
-    col = stage  # "compressed" or "analyzed"
+    col = TASK_COLUMNS[stage]
     with engine.begin() as conn:
         conn.execute(
             sa.text(
@@ -207,7 +213,7 @@ def get_pending_sessions(engine: Engine, limit: int = 100) -> list[str]:
     # Build WHERE clause: at least one stage is false
     conditions = []
     for stage in TASK_ORDER:
-        col = stage  # "compressed" or "analyzed"
+        col = TASK_COLUMNS[stage]
         conditions.append(f"{col} = false")
     where = " OR ".join(conditions)
     
