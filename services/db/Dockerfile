@@ -1,4 +1,4 @@
-FROM postgres:16.1-bullseye
+FROM postgres:18.6-trixie
 
 VOLUME /var/lib/postgresql/data
 
