@@ -11,7 +11,6 @@ from masterbase.cleanup import (
     prune_if_necessary,
 )
 from masterbase.tasks.handlers import TaskHandler
-from masterbase.tasks import CLAIM_TIMEOUT_MINUTES
 
 TASK_CLEANUP = "cleanup"
 
@@ -26,6 +25,9 @@ class CleanupTask(TaskHandler):
     @classmethod
     def run(cls, minio_client: Minio, engine: Engine, session_id: str) -> str | None:
         """Run all cleanup operations."""
+        # Lazy import to avoid a circular import with masterbase.tasks.__init__
+        from masterbase.tasks import CLAIM_TIMEOUT_MINUTES
+
         try:
             cleanup_hung_sessions(engine)
             release_expired_claims(engine, CLAIM_TIMEOUT_MINUTES)

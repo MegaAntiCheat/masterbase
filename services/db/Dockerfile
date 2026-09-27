@@ -1,4 +1,4 @@
-FROM postgres:18.6-trixie
+FROM postgres:16.15-trixie
 
 VOLUME /var/lib/postgresql/data
 

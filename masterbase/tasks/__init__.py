@@ -144,11 +144,14 @@ def get_work_item(engine: Engine) -> tuple[str, str] | None:
         result = conn.execute(
             sa.text(
                 """
-                SELECT dp.session_id, dp.compressed, dp.analyzed FROM demo_pipeline dp
-                LEFT JOIN demo_claims dc ON dp.session_id = dc.session_id AND dc.state = 'active'
-                WHERE (dp.compressed = false OR dp.analyzed = false)
-                    AND dc.session_id IS NULL
-                ORDER BY dp.created_at ASC
+                SELECT session_id, compressed, analyzed FROM demo_pipeline
+                WHERE (compressed = false OR analyzed = false)
+                    AND NOT EXISTS (
+                        SELECT 1 FROM demo_claims dc
+                        WHERE dc.session_id = demo_pipeline.session_id
+                            AND dc.state = 'active'
+                    )
+                ORDER BY created_at ASC
                 LIMIT 1
                 FOR UPDATE SKIP LOCKED;
                 """

@@ -11,7 +11,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18.6-trixie
+        image: postgres:16.15-trixie
 
         env:
           POSTGRES_PASSWORD: masterbase
@@ -22,13 +22,12 @@ jobs:
           - 8050:5432
 
       minio:
-        image: minio/minio:edge-cicd
+        image: chainguard/minio:latest
         ports:
           - 9000:9000
         env:
           MINIO_ROOT_USER: MEGASCATTERBOMB
           MINIO_ROOT_PASSWORD: masterbase
-        options: --health-cmd "curl http://localhost:9000/minio/health/live"
 
     env:
       FORCE_COLOR: 1
@@ -44,11 +43,11 @@ jobs:
           python-version: '3.12'
 
       - name: Fetch mc client
-        run: wget https://dl.min.io/client/mc/release/linux-amd64/mc && chmod +x mc
-      - name: Create the bucket
+        run: wget https://github.com/minio/mc/releases/download/RELEASE.2025-08-13T08-35-41Z/mc.linux-amd64.RELEASE.2025-08-13T08-35-41Z -O mc && chmod +x mc
+      - name: Create the buckets
         run: ./mc alias set blobs http://127.0.0.1:9000 MEGASCATTERBOMB masterbase
       - name: more minio bs
-        run: ./mc mb -p blobs/demoblobs && ./mc mb -p blobs/analysisblobs
+        run: ./mc mb -p blobs/rawblobs && ./mc mb -p blobs/demoblobs && ./mc mb -p blobs/jsonblobs
       - name: Remove mc client
         run: rm -v ./mc
 

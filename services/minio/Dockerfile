@@ -1,4 +1,10 @@
-FROM minio/minio:RELEASE.2024-06-06T09-36-42Z
+FROM chainguard/minio:latest
+
+# Image ships with a non-root default user; we need root to install the start
+# script and to write to the /blobs volume at runtime.
+# The minimal base image has no /usr/local/bin, so create it.
+USER root
+RUN mkdir -p /usr/local/bin
 
 VOLUME /blobs/
 
