@@ -160,3 +160,9 @@ def analyze_demo(minio_client: Minio, engine, session_id: str) -> str | None:
         shutil.rmtree(work_dir, ignore_errors=True)
         logger.info("Analyzed demo %s successfully", session_id)
         return None
+
+    except Exception as e:
+        logger.error("Analysis error for session %s: %s", session_id, e)
+        # Cleanup on unexpected error
+        shutil.rmtree(work_dir, ignore_errors=True)
+        return f"Analysis error: {e}"
