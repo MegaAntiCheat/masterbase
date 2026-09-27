@@ -5,6 +5,7 @@ import os
 import threading
 import time
 
+import sqlalchemy as sa
 from minio import Minio
 from sqlalchemy import Engine
 
@@ -15,13 +16,61 @@ from masterbase.tasks import (
     CLEANUP_INTERVAL,
     _wait_or_timeout,
     signal_dispatch,
-    add_to_pipeline,
     get_work_item,
     mark_stage_done,
     mark_stage_error,
 )
 
 logger = logging.getLogger(__name__)
+
+# Advisory lock key used to elect exactly one task runner across all uvicorn
+# worker processes. "MBRU" in hex.
+RUNNER_LOCK_KEY = 0x4D425255
+
+# Dedicated connection that holds the advisory lock for this process's
+# lifetime. Postgres releases the lock automatically if the connection drops
+# (process crash), so a crashed leader can never wedge the pipeline.
+_lock_conn: Engine | None = None
+
+
+def acquire_runner_lock(engine: Engine) -> bool:
+    """Try to become the task runner for this deployment.
+
+    Uses pg_try_advisory_lock on a dedicated connection that is kept open
+    for the life of the process. Returns True if this process now owns the
+    runner slot (and should start the TaskRunner).
+    """
+    global _lock_conn
+    if _lock_conn is not None:
+        return True
+    try:
+        conn = engine.connect()
+        acquired = conn.execute(
+            sa.text("SELECT pg_try_advisory_lock(:key)"), {"key": RUNNER_LOCK_KEY}
+        ).scalar()
+    except Exception:
+        logger.error("Failed to acquire task runner lock", exc_info=True)
+        return False
+    if not acquired:
+        conn.close()
+        return False
+    _lock_conn = conn
+    return True
+
+
+def release_runner_lock() -> None:
+    """Release the advisory lock and close its dedicated connection."""
+    global _lock_conn
+    if _lock_conn is not None:
+        try:
+            _lock_conn.execute(
+                sa.text("SELECT pg_advisory_unlock(:key)"), {"key": RUNNER_LOCK_KEY}
+            )
+        except Exception:
+            logger.warning("Failed to release task runner lock", exc_info=True)
+        finally:
+            _lock_conn.close()
+            _lock_conn = None
 
 
 class TaskRunner:
@@ -36,6 +85,10 @@ class TaskRunner:
         # Track running worker count
         self._running_count = 0
         self._lock = threading.Lock()
+
+    def is_running(self) -> bool:
+        """Whether the runner loop thread is active."""
+        return self._running
 
     def start(self):
         """Start the background runner thread."""
@@ -78,18 +131,22 @@ class TaskRunner:
             _wait_or_timeout(5)
 
     def _spawn_workers(self) -> None:
-        """Spawn worker threads up to TASK_WORKER_THREADS limit."""
-        with self._lock:
-            if self._running_count >= TASK_WORKER_THREADS:
-                return
+        """Spawn worker threads up to TASK_WORKER_THREADS limit.
 
-            # Try to get work items and spawn workers
-            for _ in range(TASK_WORKER_THREADS - self._running_count):
-                work = get_work_item(self.engine)
-                if work is None:
-                    break
-                session_id, stage = work
-                self._spawn_worker(session_id, stage)
+        The lock must NOT be held while calling _spawn_worker (it takes the
+        same non-reentrant lock) or doing DB work — that deadlocks the loop.
+        Only this loop thread spawns workers, and the count can only decrease
+        between the check and the increment, so no slot is ever double-issued.
+        """
+        while True:
+            with self._lock:
+                if self._running_count >= TASK_WORKER_THREADS:
+                    return
+            work = get_work_item(self.engine)
+            if work is None:
+                return
+            session_id, stage = work
+            self._spawn_worker(session_id, stage)
 
     def _spawn_worker(self, session_id: str, stage: str) -> None:
         """Spawn a worker thread for a pipeline stage."""
@@ -147,31 +204,70 @@ class TaskRunner:
             self._running_count = max(0, self._running_count - 1)
 
 
-# Module-level singleton for easy access
+# ---------------------------------------------------------------------------
+# Per-process supervisor: exactly one TaskRunner across all uvicorn workers.
+#
+# Every worker process runs _supervisor_loop on a daemon thread. Each one
+# tries to take a Postgres advisory lock; only the winner starts the actual
+# TaskRunner thread. The lock is held on a dedicated connection for the
+# process lifetime, so if the leader crashes Postgres releases it and the
+# next watchdog cycle in any surviving worker takes over.
+# ---------------------------------------------------------------------------
+
+_supervisor_stop = threading.Event()
 _runner: TaskRunner | None = None
 
 
 def get_task_runner() -> TaskRunner | None:
-    """Get the current task runner instance."""
+    """Get this process's task runner instance (if elected)."""
     return _runner
 
 
-def init_task_runner(engine: Engine, minio_client: Minio) -> TaskRunner:
-    """Initialize and return the task runner (without starting it)."""
+def start_task_runner(engine: Engine, minio_client: Minio) -> None:
+    """Start the supervisor for this process.
+
+    Safe to call once per process (Litestar startup runs it in every uvicorn
+    worker). The process that wins the advisory lock runs the TaskRunner;
+    all others just poll and take over if the leader dies.
+    """
     global _runner
-    _runner = TaskRunner(engine, minio_client)
-    return _runner
-
-
-def start_task_runner() -> None:
-    """Start the task runner if it exists."""
     if _runner is not None:
-        _runner.start()
+        logger.warning("Task runner supervisor already started.")
+        return
+
+    _runner = TaskRunner(engine, minio_client)
+    _supervisor_stop.clear()
+    t = threading.Thread(target=_supervisor_loop, args=(engine, _runner), daemon=True)
+    t.start()
 
 
 def stop_task_runner() -> None:
-    """Stop the task runner if it exists."""
+    """Stop the supervisor and runner for this process."""
     global _runner
+    _supervisor_stop.set()
     if _runner is not None:
         _runner.stop()
         _runner = None
+    release_runner_lock()
+
+
+def _supervisor_loop(engine: Engine, runner: TaskRunner) -> None:
+    """Race for the advisory lock; run the TaskRunner while we hold it."""
+    logger.info("Task runner supervisor started (pid %s)", os.getpid())
+    while not _supervisor_stop.is_set():
+        if acquire_runner_lock(engine):
+            if not runner.is_running():
+                logger.info("This process owns the task runner lock.")
+                runner.start()
+        elif runner.is_running():
+            # We were leader but lost the lock (shouldn't normally happen);
+            # step down so the new leader can run.
+            runner.stop()
+
+        # Re-check every 10s: if we don't hold the lock and no one does
+        # (leader crashed), acquire_runner_lock will succeed next cycle.
+        _supervisor_stop.wait(10)
+
+    release_runner_lock()
+    logger.info("Task runner supervisor stopped (pid %s)", os.getpid())
+

@@ -9,7 +9,7 @@ from minio import Minio
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from masterbase.taskengine import init_task_runner, start_task_runner, stop_task_runner
+from masterbase.taskengine import start_task_runner, stop_task_runner
 from masterbase.lib import make_db_uri, make_minio_client
 
 logger = logging.getLogger(__name__)
@@ -112,16 +112,16 @@ async def close_async_db_connection(app: Litestar) -> None:
 
 
 def init_background_cleanup(app: Litestar) -> None:
-    """Initialize and start the background cleanup runner.
-    
-    Cleanup runs asynchronously in a daemon thread, so startup is not blocked.
-    The first cleanup cycle runs immediately in the background thread.
+    """Start the task runner supervisor for this process.
+
+    Runs in every uvicorn worker, but only the process that wins the
+    Postgres advisory lock actually runs the TaskRunner thread; the others
+    act as watchdogs and take over if the leader dies.
     """
     engine = app.state.engine
     minio_client = app.state.minio_client
-    
-    init_task_runner(engine, minio_client)
-    start_task_runner()
+
+    start_task_runner(engine, minio_client)
 
 
 def shutdown_background_cleanup(app: Litestar) -> None:
