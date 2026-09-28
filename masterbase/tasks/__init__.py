@@ -111,12 +111,12 @@ def get_next_stage(engine: Engine, session_id: str) -> str | None:
     """Get the next pipeline stage for a session.
     
     Returns the first stage in TASK_ORDER that is not yet True,
-    or None if all stages are complete.
+    or None if all stages are complete or the session has an error.
     """
     with engine.connect() as conn:
         result = conn.execute(
             sa.text(
-                "SELECT compressed, analyzed FROM demo_pipeline WHERE session_id = :sid;"
+                "SELECT compressed, analyzed, error_message FROM demo_pipeline WHERE session_id = :sid;"
             ),
             {"sid": session_id},
         )
@@ -124,7 +124,9 @@ def get_next_stage(engine: Engine, session_id: str) -> str | None:
         if row is None:
             return None
         
-        compressed, analyzed = row
+        compressed, analyzed, error_message = row
+        if error_message is not None:
+            return None
         for i, stage in enumerate(TASK_ORDER):
             if stage == TASK_COMPRESS and not compressed:
                 return stage
@@ -137,7 +139,7 @@ def get_work_item(engine: Engine) -> tuple[str, str] | None:
     """Get the next session+stage to work on.
 
     Uses FOR UPDATE SKIP LOCKED to allow parallel workers without conflicts.
-    Skips sessions that have an active external claim.
+    Skips sessions that have an active external claim or an error_message.
     Returns (session_id, stage) or None if no work available.
     """
     with engine.begin() as conn:
@@ -146,6 +148,7 @@ def get_work_item(engine: Engine) -> tuple[str, str] | None:
                 """
                 SELECT session_id, compressed, analyzed FROM demo_pipeline
                 WHERE (compressed = false OR analyzed = false)
+                    AND error_message IS NULL
                     AND NOT EXISTS (
                         SELECT 1 FROM demo_claims dc
                         WHERE dc.session_id = demo_pipeline.session_id
