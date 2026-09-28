@@ -152,8 +152,11 @@ def analyze_demo(minio_client: Minio, engine, session_id: str) -> str | None:
 
         error = ingest_analysis(minio_client, engine, session_id, analysis_obj)
         if error:
-            # Cleanup on error to avoid leaving partial state
             shutil.rmtree(work_dir, ignore_errors=True)
+            if error == "demo already analyzed":
+                # Already ingested (e.g. via external API) - treat as success
+                logger.info("Session %s was already analyzed, skipping", session_id)
+                return None
             return error
 
         # Success - cleanup temp folder
